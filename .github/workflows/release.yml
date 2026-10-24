@@ -1,0 +1,95 @@
+name: Release
+
+# Runs when you push a tag like v1.0.1 (app/release.sh does that for you).
+# It builds the Windows program on a real Windows machine, tests it, and publishes a GitHub Release
+# with the zip, the release notes (from CHANGELOG.md) and latest.json (read by "Check online").
+# You can also start it by hand (Actions tab, "Release", "Run workflow"): the zip is then kept as a
+# download on that run and no release is made.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check that the tag matches the program version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          FILE_VER="$(sed -nE 's/^APP_VERSION = "([^"]+)".*/\1/p' app/race_overlay/constants.py)"
+          echo "tag=$TAG, APP_VERSION=$FILE_VER"
+          [ "$TAG" = "$FILE_VER" ] || { echo "Tag and APP_VERSION differ"; exit 1; }
+
+      - name: Install the build tools
+        shell: bash
+        run: python -m pip install --upgrade pip PyQt6 pyinstaller pillow
+
+      - name: Smoke test (the whole program, no screen, made-up race)
+        shell: bash
+        run: python app/smoke_test.py
+
+      - name: Build UmaRaceOverlay.exe
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --clean --windowed --name UmaRaceOverlay \
+            --paths app --icon app/icon.png app/race_overlay_native.py
+
+      - name: Check that the built program starts
+        shell: bash
+        run: |
+          # --version prints and exits (silently, it is a window program). Exit code 0 proves that the
+          # packaged program loads all its parts; a hang or an error stops the build here.
+          timeout 120 dist/UmaRaceOverlay/UmaRaceOverlay.exe --version
+
+      - name: Make the zip, the release notes and latest.json
+        shell: pwsh
+        run: |
+          $m = Select-String -Path app/race_overlay/constants.py -Pattern '^APP_VERSION = "([^"]+)"'
+          $ver = $m.Matches[0].Groups[1].Value
+          $name = "race-overlay-windows-$ver"
+          Copy-Item app/icon.png, README.md, CHANGELOG.md dist/UmaRaceOverlay/
+          Rename-Item -Path dist/UmaRaceOverlay -NewName $name
+          Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip"
+          # release notes = the "## $ver" section of CHANGELOG.md
+          $notes = @(); $on = $false
+          foreach ($line in Get-Content CHANGELOG.md -Encoding UTF8) {
+            if ($line -eq "## $ver") { $on = $true; continue }
+            if ($line -like "## *") { $on = $false }
+            if ($on) { $notes += $line }
+          }
+          $text = ($notes -join "`n").Trim()
+          if (-not $text) { $text = "See CHANGELOG.md" }
+          [System.IO.File]::WriteAllText("$PWD/notes.md", $text, (New-Object System.Text.UTF8Encoding $false))
+          $repo = $env:GITHUB_REPOSITORY
+          $json = [ordered]@{ version = $ver; notes = $text; zip = "https://github.com/$repo/releases/download/v$ver/$name.zip" } | ConvertTo-Json
+          [System.IO.File]::WriteAllText("$PWD/dist/latest.json", $json, (New-Object System.Text.UTF8Encoding $false))
+          Get-ChildItem dist
+          "ZIP=dist/$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VER=$ver" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: ${{ env.ZIP }}
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$ZIP" dist/latest.json \
+            --title "Version $VER" --notes-file notes.md

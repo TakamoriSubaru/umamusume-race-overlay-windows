@@ -1,0 +1,1817 @@
+"""The Menu / Settings window."""
+
+import os
+from PyQt6.QtCore import QSize, QTimer, QUrl, Qt
+from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QColor, QFont, QIcon
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QAbstractSpinBox,
+    QApplication,
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFontComboBox,
+    QFormLayout,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QScrollArea,
+    QSlider,
+    QSpinBox,
+    QTabWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+from .constants import (APP_NAME, APP_VERSION, FROZEN, IS_WINDOWS, LUCK_NAME, MATCH_NAME, PLATFORM, RELEASES_URL, RESULTS_NAME,
+                        SCRIPT_DIR, STANDINGS_NAME, STATE_COLORS, THEME_PRESETS)
+from . import logbuf
+from .databases import BUILTIN_OUTFITS
+from .diagnostics import LOG_FILES, read_tail, run_checks
+from .sources import choose_source, count_race_files
+from .setups import SETUPS, current_setup
+from .theme import Banner, THEME, build_theme_qss
+from .updater import (
+    Job,
+    is_update_path,
+    check_update_files,
+    download_update,
+    fetch_manifest,
+    install_update,
+    read_update_file,
+    version_tuple,
+)
+from .sheets import VIEWS, is_auto
+from .images import find_file_ci
+from .util import open_folder
+
+
+SLIDE_CHOICES = (("auto", "Auto: the side the window is on"),
+                 ("left", "Always from the left"),
+                 ("right", "Always from the right"),
+                 ("off", "No sliding (fade in)"))
+
+
+SOURCE_CHOICES = (("", "Follow the default (live)" if IS_WINDOWS else "Follow the start script (MODE in settings.sh)"),
+                  ("live", "Live: exact race clock from Race Overlay"),
+                  ("watch", "Saved races: read the race files from a folder"))
+
+
+class Collapsible(QWidget):
+    """A folded section: a title you click to open it. Keeps the less used settings out of the way."""
+
+    def __init__(self, title, open_=False, on_toggle=None):
+        super().__init__()
+        self._title = title
+        self._on_toggle = on_toggle
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        self.btn = QPushButton()
+        self.btn.setObjectName("fold")
+        self.btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn.clicked.connect(lambda: self.set_open(not self.body.isVisible(), True))
+        lay.addWidget(self.btn)
+        self.body = QWidget()
+        self.body_l = QVBoxLayout(self.body)
+        self.body_l.setContentsMargins(6, 0, 0, 0)
+        lay.addWidget(self.body)
+        self.set_open(open_)
+
+    def set_open(self, on, user=False):
+        self.body.setVisible(bool(on))
+        self.btn.setText(("\u25be  " if on else "\u25b8  ") + self._title)
+        if user and self._on_toggle:
+            self._on_toggle(bool(on))
+
+    def form(self):
+        f = QFormLayout()
+        self.body_l.addLayout(f)
+        return f
+
+
+class SettingsDialog(QDialog):
+    def __init__(self, ov):
+        super().__init__(None)
+        self.ov = ov
+        self.setWindowTitle(APP_NAME + " - Menu")
+        icon_path = os.path.join(SCRIPT_DIR, "icon.png")
+        if os.path.isfile(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+        self.resize(720, 780)
+        self.setStyleSheet(build_theme_qss())
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 16, 16, 14)
+        lay.setSpacing(12)
+        lay.addWidget(Banner("Race Overlay", PLATFORM + " edition  ·  version %s  ·  settings" % APP_VERSION))
+        tabs = QTabWidget()
+        tabs.setDocumentMode(False)
+        lay.addWidget(tabs)
+        self.count_job = None
+        self._count_again = False
+
+        # ---- Home tab (what most people need: status, show / preview, place the boards)
+        mt = QWidget()
+        mv = QVBoxLayout(mt)
+        self.lbl_state = QLabel()
+        self.lbl_state.setWordWrap(True)
+        self.lbl_state.setStyleSheet("font-size:15px;")
+        mv.addWidget(self.lbl_state)
+
+        sbx = QGroupBox("Setup")
+        sbl = QVBoxLayout(sbx)
+        srow = QHBoxLayout()
+        self.cmb_setup = QComboBox()
+        for st in SETUPS:
+            self.cmb_setup.addItem(st["title"], st["key"])
+        self.cmb_setup.addItem("Custom (changed by hand)", "")
+        cur = current_setup(ov.s)
+        self.cmb_setup.setCurrentIndex(self.cmb_setup.findData(cur or ""))
+        self.cmb_setup.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.cmb_setup.setMinimumContentsLength(10)
+        self.btn_setup = QPushButton("Use this setup")
+        self.btn_setup.setObjectName("primary")
+        self.btn_setup.setMinimumWidth(10)
+        srow.addWidget(self.cmb_setup, 1)
+        srow.addWidget(self.btn_setup)
+        sbl.addLayout(srow)
+        self.lbl_setup = QLabel()
+        self.lbl_setup.setWordWrap(True)
+        sbl.addWidget(self.lbl_setup)
+
+        def on_setup_changed(_i=None):
+            key = self.cmb_setup.currentData()
+            st = next((x for x in SETUPS if x["key"] == key), None)
+            self.btn_setup.setEnabled(st is not None)
+            self.lbl_setup.setText(st["blurb"] if st else "You changed boards or options by hand. Pick a setup "
+                                   "to switch to a ready-made one.")
+        self.cmb_setup.currentIndexChanged.connect(on_setup_changed)
+        self.btn_setup.clicked.connect(lambda: ov.apply_setup(self.cmb_setup.currentData()))
+        on_setup_changed()
+        mv.addWidget(sbx)
+
+        qs = Collapsible("Quick start (3 steps)", open_=bool(ov.s.get("quick_start_open", True)),
+                         on_toggle=lambda on: ov.set_setting("quick_start_open", on))
+        qtext = QLabel("<b>1.</b> Start Uma Musume. The overlay waits for it and shows a green dot when it is ready.<br>"
+                       "<b>2.</b> Press <i>Show preview race</i> below to see the tower, and <i>Show overlay window</i> "
+                       "so OBS can see it.<br>"
+                       "<b>3.</b> In OBS add a <i>Window Capture (" + "Windows 10 1903 and up" + ")</i> source and pick "
+                       "<i>" + APP_NAME + "</i>.<br>"
+                       "<i>The results and standings boards are separate windows. Add them the same way.</i>")
+        qtext.setWordWrap(True)
+        qs.body_l.addWidget(qtext)
+        mv.addWidget(qs)
+
+        row_b = QHBoxLayout()
+        self.btn_show = QPushButton("Show overlay window")
+        self.btn_show.setObjectName("primary")
+        self.btn_show.clicked.connect(lambda: ov.set_overlay_visible(not ov.window_wanted()))
+        self.btn_prev2 = QPushButton("Show preview race")
+        self.btn_prev2.clicked.connect(lambda: ov.set_preview(not ov.preview))
+        row_b.addWidget(self.btn_show)
+        row_b.addWidget(self.btn_prev2)
+        mv.addLayout(row_b)
+        self.note_show = QLabel()
+        self.note_show.setWordWrap(True)
+        mv.addWidget(self.note_show)
+
+        bx = QGroupBox("Boards")
+        bx.setStyleSheet("QGroupBox { margin-top: 4px; padding-top: 12px; } QGroupBox::title { height: 0; padding: 0; background: transparent; }")
+        bxl = QVBoxLayout(bx)
+        bxt = QLabel("Put each board where you want it on the stream, then press the button again to hide it.")
+        bxt.setWordWrap(True)
+        bxl.addWidget(bxt)
+        row_c = QHBoxLayout()
+        self.btn_board = QPushButton("Show results board (to place it)")
+        self.btn_board.clicked.connect(lambda: ov.set_board_pinned(not ov.board.pinned))
+        self.btn_stand = QPushButton("Show standings board (to place it)")
+        self.btn_stand.clicked.connect(lambda: ov.set_standings_pinned(not ov.standings.pinned))
+        row_c.addWidget(self.btn_board)
+        row_c.addWidget(self.btn_stand)
+        bxl.addLayout(row_c)
+        self.btn_luck = QPushButton("Show skill luck board (to place it)")
+        self.btn_luck.clicked.connect(lambda: ov.set_luck_pinned(not ov.luck.pinned))
+        bxl.addWidget(self.btn_luck)
+        self.btn_match = QPushButton("Show match board (to place it)")
+        self.btn_match.clicked.connect(lambda: ov.set_match_pinned(not ov.mboard.pinned))
+        bxl.addWidget(self.btn_match)
+        self.btn_test = QPushButton("Replay a saved race (test, no game needed)...")
+        self.btn_test.clicked.connect(lambda: ov.test_replay())
+        bxl.addWidget(self.btn_test)
+        place = Collapsible("Place the boards on screen (before you stream)")
+        place.body_l.addWidget(bx)
+        mv.addWidget(place)
+
+        more = Collapsible("More: start-up, picture folders, updates")
+        mm = more.body_l
+        self.cb_menu = QCheckBox("Open this menu when the program starts")
+        self.cb_menu.setChecked(bool(ov.s.get("open_menu", True)))
+        self.cb_menu.toggled.connect(lambda on: ov.set_setting("open_menu", on))
+        mm.addWidget(self.cb_menu)
+        self.cb_server = QCheckBox("Quitting the overlay also closes the Race Overlay server")
+        self.cb_server.setChecked(bool(ov.s.get("stop_server", True)))
+        self.cb_server.toggled.connect(lambda on: ov.set_setting("stop_server", on))
+        self.cb_server.setToolTip("Only the server that this program (or the start script) started is closed.")
+        mm.addWidget(self.cb_server)
+
+        if IS_WINDOWS:
+            rbx = QGroupBox("Race Overlay (live race data)")
+            rl = QVBoxLayout(rbx)
+            cb_ro = QCheckBox("Start Race Overlay's server when Uma Musume runs")
+            cb_ro.setChecked(bool(ov.s.get("start_race_overlay", True)))
+            cb_ro.toggled.connect(lambda on: ov.set_setting("start_race_overlay", on))
+            rl.addWidget(cb_ro)
+            rl.addWidget(QLabel("Folder with <i>Race Overlay.exe</i> (empty = look for it in Documents, Downloads, Desktop):"))
+            rrow = QHBoxLayout()
+            self.ed_ro = QLineEdit(ov.s.get("race_overlay_dir", ""))
+            self.ed_ro.setPlaceholderText("C:\\Users\\you\\Documents\\Race Overlay")
+            self.ed_ro.setMinimumWidth(100)
+            self.lbl_ro = QLabel()
+            self.lbl_ro.setWordWrap(True)
+
+            def ro_apply():
+                from .diagnostics import find_race_overlay
+                ov.set_setting("race_overlay_dir", self.ed_ro.text().strip())
+                found = find_race_overlay(self.ed_ro.text().strip())
+                self.lbl_ro.setText("Found: %s (restart the overlay to use a new folder)" % found if found
+                                    else "Race Overlay.exe not found there. Without it only saved races work.")
+
+            def ro_choose():
+                d = QFileDialog.getExistingDirectory(self, "Folder with Race Overlay.exe",
+                                                     self.ed_ro.text().strip() or os.path.expanduser("~"))
+                if d:
+                    self.ed_ro.setText(d)
+                    ro_apply()
+            self.ed_ro.editingFinished.connect(ro_apply)
+            bro = QPushButton("Choose...")
+            bro.clicked.connect(ro_choose)
+            rrow.addWidget(self.ed_ro, 1)
+            rrow.addWidget(bro)
+            rl.addLayout(rrow)
+            rl.addWidget(self.lbl_ro)
+            ro_apply_label = ro_apply
+            QTimer.singleShot(0, ro_apply_label)
+            mm.addWidget(rbx)
+
+        box = QGroupBox("Where to put the pictures")
+        bl = QVBoxLayout(box)
+        for title, path, hint in (
+                ("Uma faces", ov.thumbs.uma,
+                 "Easiest: use the People tab. Or name the file with the card id, chara id or uma name, "
+                 "e.g. 100101.png or Special Week.png. Without a picture of yours the face from Race Overlay is used."),
+                ("Player pictures", ov.thumbs.players,
+                 "Easiest: use the People tab. Or name the file after the trainer, e.g. Takamori.png")):
+            lab = QLabel("<b>%s</b><br>%s<br><i>%s</i>" % (title, path, hint))
+            lab.setWordWrap(True)
+            lab.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            bl.addWidget(lab)
+            bo = QPushButton("Open folder")
+            bo.clicked.connect(lambda _=False, pth=path: open_folder(pth))
+            bl.addWidget(bo)
+        mm.addWidget(box)
+
+        ubox = QGroupBox("Updates  (current version %s)" % APP_VERSION)
+        ul = QVBoxLayout(ubox)
+        self.lbl_update = QLabel("Update from a file you downloaded, or check online if you have an update link.")
+        self.lbl_update.setWordWrap(True)
+        ul.addWidget(self.lbl_update)
+        bu = QPushButton("Update from file...  (.zip or race_overlay_native.py)")
+        bu.clicked.connect(self.update_from_file)
+        ul.addWidget(bu)
+        ur = QHBoxLayout()
+        self.ed_url = QLineEdit(ov.s.get("update_url", ""))
+        self.ed_url.setPlaceholderText("Update link (https://.../latest.json)")
+        self.ed_url.editingFinished.connect(lambda: ov.set_setting("update_url", self.ed_url.text().strip()))
+        self.btn_check = QPushButton("Check online")
+        self.btn_check.clicked.connect(self.check_online)
+        ur.addWidget(self.ed_url, 1)
+        ur.addWidget(self.btn_check)
+        ul.addLayout(ur)
+        self.btn_install = QPushButton("Install the new version")
+        self.btn_install.setVisible(False)
+        self.btn_install.clicked.connect(self.install_online)
+        ul.addWidget(self.btn_install)
+        mm.addWidget(ubox)
+        self.pending = None
+        self.job = None
+        mv.addWidget(more)
+
+        mv.addStretch(1)
+        bq = QPushButton("Quit the overlay program")
+        bq.setObjectName("danger")
+        bq.clicked.connect(ov.quit_app)
+        mv.addWidget(bq)
+        tabs.addTab(self.scrolled(mt), "Home")
+
+        # ---- Race data tab (where the races come from + the saved races folder)
+        rt = QWidget()
+        rv = QVBoxLayout(rt)
+        sbox = QGroupBox("Where do the races come from?")
+        sl = QVBoxLayout(sbox)
+        self.cmb_source = QComboBox()
+        for _value, text in SOURCE_CHOICES:
+            self.cmb_source.addItem(text)
+        cur = ov.s.get("source", "")
+        self.cmb_source.setCurrentIndex(next((i for i, (v, _t) in enumerate(SOURCE_CHOICES) if v == cur), 0))
+        self.cmb_source.activated.connect(self.on_source)
+        sl.addWidget(self.cmb_source)
+        self.lbl_source = QLabel()
+        self.lbl_source.setWordWrap(True)
+        sl.addWidget(self.lbl_source)
+        rv.addWidget(sbox)
+
+        fbox = QGroupBox("Saved races folder")
+        fl = QVBoxLayout(fbox)
+        hint = QLabel("The folder where your race files (horseACT .json) are saved, for example "
+                      "<i>Documents/Saved races</i>. Choose the main folder: the folders inside it "
+                      "(Career, Champions meeting, Room match, ...) are searched too.")
+        hint.setWordWrap(True)
+        fl.addWidget(hint)
+        frow = QHBoxLayout()
+        self.ed_races = QLineEdit(ov.s.get("saved_races_dir", ""))
+        self.ed_races.setPlaceholderText("(not chosen yet)")
+        self.ed_races.editingFinished.connect(self.on_races_text)
+        self.btn_browse = QPushButton("Browse...")
+        self.btn_browse.setObjectName("primary")
+        self.btn_browse.clicked.connect(self.browse_races)
+        frow.addWidget(self.ed_races, 1)
+        frow.addWidget(self.btn_browse)
+        fl.addLayout(frow)
+        self.cb_sub = QCheckBox("Also look in the folders inside it")
+        self.cb_sub.setChecked(bool(ov.s.get("watch_subfolders", True)))
+        self.cb_sub.toggled.connect(self.on_subfolders)
+        fl.addWidget(self.cb_sub)
+        self.lbl_found = QLabel("")
+        self.lbl_found.setWordWrap(True)
+        fl.addWidget(self.lbl_found)
+        bo2 = QPushButton("Open folder")
+        bo2.clicked.connect(self.open_races_folder)
+        fl.addWidget(bo2)
+        rv.addWidget(fbox)
+
+        dbox = QGroupBox("When does the race start? (saved races)")
+        dl = QVBoxLayout(dbox)
+        dtext = QLabel("The game saves the race file when the race <b>loads</b>, long before the gates open. "
+                       "The overlay waits this many seconds after it sees a new file and then slides in. "
+                       "Too early? Make it bigger. Too late? Make it smaller.")
+        dtext.setWordWrap(True)
+        dl.addWidget(dtext)
+        drow = QHBoxLayout()
+        self.sp_delay = QDoubleSpinBox()
+        self.sp_delay.setRange(0.0, 120.0)
+        self.sp_delay.setSingleStep(0.5)
+        self.sp_delay.setDecimals(1)
+        self.sp_delay.setSuffix(" seconds")
+        self.sp_delay.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)   # type it, or use the wheel / arrow keys
+        self.sp_delay.setMinimumWidth(150)
+        self.sp_delay.setValue(float(ov.s.get("start_delay", 12.0)))
+        self.sp_delay.valueChanged.connect(lambda v: ov.set_setting("start_delay", float(v)))
+        drow.addWidget(self.sp_delay)
+        drow.addStretch(1)
+        dl.addLayout(drow)
+        dnote = QLabel("Fine tuning: with the overlay window selected, the arrow keys move the start by "
+                       "0.25 s (left / right) or 1 s (down / up). Live mode needs none of this: it follows "
+                       "the real race clock.")
+        dnote.setWordWrap(True)
+        dl.addWidget(dnote)
+        rv.addWidget(dbox)
+
+        kbox = QGroupBox("Race Overlay server (live mode)")
+        kl = QVBoxLayout(kbox)
+        kn = QLabel("The server only works while Uma Musume is running. To test without the game use "
+                    "<i>Show preview race</i> or <i>Replay a saved race (test)</i> in the Home tab.")
+        kn.setWordWrap(True)
+        kl.addWidget(kn)
+        rv.addWidget(kbox)
+
+        wbox = QGroupBox("Good to know")
+        wl = QVBoxLayout(wbox)
+        know = QLabel("Files that are not races (for example a list of veterans) are skipped automatically.")
+        know.setWordWrap(True)
+        wl.addWidget(know)
+        rv.addWidget(wbox)
+        rv.addStretch(1)
+        tabs.addTab(self.scrolled(rt), "Race data")
+        self.update_source_label()
+        self.refresh_count()
+
+        # ---- Look tab
+        look = QWidget()                  # Look: pictures, colours, text
+        lv = QVBoxLayout(look)
+        f = QFormLayout()
+        lv.addLayout(f)
+        fc = QFormLayout()                # colours and font
+        lv.addLayout(fc)
+        lv.addStretch(1)
+        tower = QWidget()                 # Tower: the race window itself
+        tv = QVBoxLayout(tower)
+        ft = QFormLayout()
+        tv.addLayout(ft)
+        tv.addStretch(1)
+        boards = QWidget()                # Boards: results board and skill luck board
+        bv = QVBoxLayout(boards)
+        gres = QGroupBox("Results board")
+        fr = QFormLayout(gres)
+        bv.addWidget(gres)
+        gluck = QGroupBox("Skill luck board")
+        fl = QFormLayout(gluck)
+        bv.addWidget(gluck)
+        bv.addStretch(1)
+        s = ov.s
+
+        self.cb_top = QCheckBox("Keep the overlay above all other windows")
+        self.cb_top.setChecked(bool(s.get("on_top", True)))
+        self.cb_top.toggled.connect(lambda on: ov.set_setting("on_top", on))
+        ft.addRow("Always on top", self.cb_top)
+
+        self.cb_hide = QCheckBox("Hide the window until a race starts")
+        self.cb_hide.setChecked(bool(s.get("auto_hide", True)))
+        self.cb_hide.toggled.connect(lambda on: ov.set_setting("auto_hide", on))
+        self.cb_hide.setToolTip("The window is hidden when no race runs and shows (without taking focus from the game)\nwhen a race starts. Use 'Show overlay window' in the Home tab to place it.")
+        ft.addRow("Before the race", self.cb_hide)
+
+        self.cmb_slide = QComboBox()
+        for _v, text in SLIDE_CHOICES:
+            self.cmb_slide.addItem(text)
+        self.cmb_slide.setCurrentIndex(next((i for i, (v, _t) in enumerate(SLIDE_CHOICES)
+                                             if v == s.get("slide", "auto")), 0))
+        self.cmb_slide.activated.connect(lambda i: ov.set_setting("slide", SLIDE_CHOICES[i][0]))
+        ft.addRow("Slides in from", self.cmb_slide)
+
+        self.cb_title = QCheckBox("Show the window title bar")
+        self.cb_title.setChecked(bool(s.get("title_bar", False)))
+        self.cb_title.toggled.connect(lambda on: ov.set_setting("title_bar", on))
+        self.cb_title.setToolTip("Off = clean window: drag to move it, pull the edges to resize it.")
+        ft.addRow("Title bar", self.cb_title)
+
+        self.cmb_avatar = QComboBox()
+        self._pic_modes = [m for m, _ in ov.PICTURE_CHOICES]
+        self.cmb_avatar.addItems([t for _, t in ov.PICTURE_CHOICES])
+        self.cmb_avatar.setCurrentIndex(self._pic_modes.index(ov.picture_mode()))
+        self.cmb_avatar.currentIndexChanged.connect(
+            lambda i: ov.set_setting("pictures", self._pic_modes[i]))
+        f.addRow("Pictures", self.cmb_avatar)
+
+        self.cmb_theme = QComboBox()
+        self.cmb_theme.addItem("Choose a colour set...")
+        self.cmb_theme.addItems(list(THEME_PRESETS))
+        self.cmb_theme.activated.connect(self.on_theme)
+        self.cmb_theme.setToolTip("Sets the background, text and accent colours in one go. You can still change each colour below.")
+        f.addRow("Colour set", self.cmb_theme)
+
+        self.btn_bg = QPushButton()
+        self.btn_bg.clicked.connect(lambda: self.pick("bg", self.btn_bg))
+        fc.addRow("Background colour", self.btn_bg)
+
+        self.sl_op = QSlider(Qt.Orientation.Horizontal)
+        self.sl_op.setRange(0, 100)
+        self.sl_op.setValue(int(float(s.get("bg_opacity", 1.0)) * 100))
+        self.sl_op.valueChanged.connect(lambda v: ov.set_setting("bg_opacity", v / 100.0))
+        fc.addRow("Background opacity\n(--transparent / --chroma)", self.sl_op)
+
+        self.btn_tc = QPushButton()
+        self.btn_tc.clicked.connect(lambda: self.pick("text_color", self.btn_tc))
+        fc.addRow("Text colour", self.btn_tc)
+
+        self.btn_sc = QPushButton()
+        self.btn_sc.clicked.connect(lambda: self.pick("sub_color", self.btn_sc))
+        fc.addRow("Small text colour", self.btn_sc)
+
+        self.btn_ac = QPushButton()
+        self.btn_ac.clicked.connect(lambda: self.pick("accent", self.btn_ac))
+        fc.addRow("Accent colour\n(results board)", self.btn_ac)
+
+        row = QHBoxLayout()
+        self.sl_size = QSlider(Qt.Orientation.Horizontal)
+        self.sl_size.setRange(60, 140)
+        self.sl_size.setValue(int(float(s.get("text_scale", 1.0)) * 100))
+        self.lbl_size = QLabel()
+        self.sl_size.valueChanged.connect(self.on_size)
+        row.addWidget(self.sl_size)
+        row.addWidget(self.lbl_size)
+        f.addRow("Text size", row)
+
+        row2 = QHBoxLayout()
+        self.cb_deffont = QCheckBox("Default font")
+        self.font_box = QFontComboBox()
+        if s.get("font"):
+            self.font_box.setCurrentFont(QFont(s["font"]))
+        self.cb_deffont.setChecked(not s.get("font"))
+        self.font_box.setEnabled(bool(s.get("font")))
+        self.cb_deffont.toggled.connect(self.on_font)
+        self.font_box.currentFontChanged.connect(self.on_font)
+        row2.addWidget(self.cb_deffont)
+        row2.addWidget(self.font_box, 1)
+        fc.addRow("Font", row2)
+
+        self.cb_arrows = QCheckBox("Show an arrow when a uma gains or loses a place")
+        self.cb_arrows.setChecked(bool(s.get("rank_arrows", True)))
+        self.cb_arrows.toggled.connect(lambda on: ov.set_setting("rank_arrows", on))
+        ft.addRow("Position arrows", self.cb_arrows)
+
+        self.sp_rows = QSpinBox()
+        self.sp_rows.setRange(0, 18)
+        self.sp_rows.setSpecialValueText("All of them")
+        self.sp_rows.setSuffix(" rows")
+        self.sp_rows.setValue(int(s.get("max_rows", 0) or 0))
+        self.sp_rows.valueChanged.connect(lambda v: ov.set_setting("max_rows", int(v)))
+        self.sp_rows.setToolTip("Show only the first places in the tower. The window height follows the number of rows.")
+        ft.addRow("Rows in the tower", self.sp_rows)
+
+        self.cmb_style = QComboBox()
+        self.cmb_style.addItem("Full tower", "full")
+        self.cmb_style.addItem("Small corner tower (top umas only)", "compact")
+        self.cmb_style.setCurrentIndex(1 if s.get("tower_style") == "compact" else 0)
+        self.cmb_style.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.cmb_style.setMinimumContentsLength(10)
+        self.cmb_style.currentIndexChanged.connect(lambda _i: (
+            ov.set_setting("tower_style", self.cmb_style.currentData()),
+            self.sp_crow.setEnabled(self.cmb_style.currentData() == "compact")))
+        self.cmb_style.setToolTip("The small tower shows only the first umas, with name and gap. When the race ends, "
+                                  "the results board comes in as usual.")
+        ft.addRow("Tower style", self.cmb_style)
+
+        self.sp_crow = QSpinBox()
+        self.sp_crow.setRange(2, 10)
+        self.sp_crow.setSuffix(" umas")
+        self.sp_crow.setValue(int(s.get("compact_rows", 5) or 5))
+        self.sp_crow.valueChanged.connect(lambda v: ov.set_setting("compact_rows", int(v)))
+        self.sp_crow.setEnabled(s.get("tower_style") == "compact")
+        ft.addRow("Small tower shows", self.sp_crow)
+
+        self.cmb_corner = QComboBox()
+        self.cmb_corner.addItem("Choose a corner...", "")
+        for key, text in (("top-left", "Top left"), ("top-right", "Top right"),
+                          ("bottom-left", "Bottom left"), ("bottom-right", "Bottom right")):
+            self.cmb_corner.addItem(text, key)
+        self.cmb_corner.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.cmb_corner.setMinimumContentsLength(10)
+        self.cmb_corner.currentIndexChanged.connect(
+            lambda _i: self.cmb_corner.currentData() and ov.snap_to_corner(self.cmb_corner.currentData()))
+        self.cmb_corner.setToolTip("Moves the overlay window to that corner of the screen. You can still drag it.")
+        ft.addRow("Move window to", self.cmb_corner)
+
+        self.cb_board = QCheckBox("After each race")
+        self.cb_board.setChecked(bool(s.get("results_board", True)))
+        self.cb_board.toggled.connect(lambda on: ov.set_setting("results_board", on))
+        self.cb_board.setToolTip("A second window ('" + RESULTS_NAME + "') with the final places.\n"
+                                 "Add it as its own window source in OBS. Use 'Show results board' in the Home tab to place it.")
+        fr.addRow("Show", self.cb_board)
+
+        self.sp_board = QDoubleSpinBox()
+        self.sp_board.setRange(0.0, 120.0)
+        self.sp_board.setDecimals(0)
+        self.sp_board.setSingleStep(1.0)
+        self.sp_board.setSpecialValueText("Until the next race")
+        self.sp_board.setSuffix(" seconds")
+        self.sp_board.setValue(float(s.get("results_seconds", 10.0)))
+        self.sp_board.valueChanged.connect(lambda v: ov.set_setting("results_seconds", float(v)))
+        fr.addRow("Stays", self.sp_board)
+        self.cb_luck = QCheckBox("After the results (luckiest / unluckiest)")
+        self.cb_luck.setChecked(bool(s.get("luck_board", False)))
+        self.cb_luck.setToolTip("Needs the race data to list each player's skills: saved races do. "
+                                "In OBS it is its own window: " + LUCK_NAME + ".")
+        self.cb_luck.toggled.connect(lambda on: ov.set_setting("luck_board", on))
+        fl.addRow("Show", self.cb_luck)
+        self.sp_luck = QSpinBox()
+        self.sp_luck.setRange(1, 5)
+        self.sp_luck.setSuffix(" players")
+        self.sp_luck.setValue(int(s.get("luck_rows", 3)))
+        self.sp_luck.valueChanged.connect(lambda v: ov.set_setting("luck_rows", int(v)))
+        fl.addRow("Players per side", self.sp_luck)
+
+        self.cb_prev = QCheckBox("Show a preview race (to see your changes)")
+        self.cb_prev.toggled.connect(ov.set_preview)
+        f.addRow("Preview", self.cb_prev)
+
+        btn_reset = QPushButton("Reset look to defaults")
+        btn_reset.clicked.connect(self.reset)
+        fc.addRow("", btn_reset)
+
+        # new options for the boards
+        ed_rt = QLineEdit(s.get("results_title", ""))
+        ed_rt.setPlaceholderText("RACE RESULTS")
+        ed_rt.editingFinished.connect(lambda: (ov.set_setting("results_title", ed_rt.text().strip()), ov.board.update()))
+        fr.addRow("Title", ed_rt)
+        cmb_det = QComboBox()
+        for key, text in (("both", "Finish time and gap"), ("time", "Finish time only"), ("none", "Names only")):
+            cmb_det.addItem(text, key)
+        cmb_det.setCurrentIndex(max(0, cmb_det.findData(s.get("results_details", "both"))))
+        cmb_det.currentIndexChanged.connect(lambda _i: (ov.set_setting("results_details", cmb_det.currentData()), ov.board.update()))
+        fr.addRow("Each row shows", cmb_det)
+        ed_lt = QLineEdit(s.get("luck_title", ""))
+        ed_lt.setPlaceholderText("SKILL LUCK")
+        ed_lt.editingFinished.connect(lambda: (ov.set_setting("luck_title", ed_lt.text().strip()), ov.luck.update()))
+        fl.addRow("Title", ed_lt)
+        sp_ls = QDoubleSpinBox()
+        sp_ls.setRange(0.0, 120.0)
+        sp_ls.setDecimals(0)
+        sp_ls.setSpecialValueText("Until the next race")
+        sp_ls.setSuffix(" seconds")
+        sp_ls.setValue(float(s.get("luck_seconds", 10.0)))
+        sp_ls.valueChanged.connect(lambda v: ov.set_setting("luck_seconds", float(v)))
+        fl.addRow("Stays", sp_ls)
+        bnote = QLabel("<i>The standings board has its own settings in the Points tab. Each board is its own window "
+                       "in OBS. Drag a board to move it, pull its edges to resize it.</i>")
+        bnote.setWordWrap(True)
+        bv.insertWidget(0, bnote)
+
+        gtime = QGroupBox("When the boards come in")
+        tl = QVBoxLayout(gtime)
+        tn = QLabel("After a race the results board comes in first. Every other board can come in <b>one after "
+                    "the other</b> or <b>together with the results board</b>, so you can show all of them at once. "
+                    "Put each board in its own place in OBS. The seconds are extra waiting time.")
+        tn.setWordWrap(True)
+        tl.addWidget(tn)
+        tf = QFormLayout()
+        sp_rd = QDoubleSpinBox()
+        sp_rd.setRange(0.0, 60.0)
+        sp_rd.setDecimals(1)
+        sp_rd.setSingleStep(0.5)
+        sp_rd.setSuffix(" seconds later")
+        sp_rd.setValue(float(s.get("results_delay", 0.0)))
+        sp_rd.valueChanged.connect(lambda x: ov.set_setting("results_delay", float(x)))
+        tf.addRow("Results board", sp_rd)
+        self.timing = {}
+        for key, label in (("luck", "Skill luck board"), ("match", "Match board"), ("standings", "Standings board")):
+            row = QHBoxLayout()
+            cmb = QComboBox()
+            cmb.addItem("After the one before", "after")
+            cmb.addItem("Together with the results", "with")
+            cmb.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            cmb.setMinimumContentsLength(10)
+            cmb.setCurrentIndex(max(0, cmb.findData(s.get(key + "_when", "after"))))
+            cmb.currentIndexChanged.connect(lambda _i, k=key, c=cmb: ov.set_setting(k + "_when", c.currentData()))
+            sp = QDoubleSpinBox()
+            sp.setRange(0.0, 120.0)
+            sp.setDecimals(1)
+            sp.setSingleStep(0.5)
+            sp.setPrefix("+ ")
+            sp.setSuffix(" s")
+            sp.setValue(float(s.get(key + "_delay", 0.0)))
+            sp.valueChanged.connect(lambda x, k=key: ov.set_setting(k + "_delay", float(x)))
+            row.addWidget(cmb, 1)
+            row.addWidget(sp)
+            tf.addRow(label, row)
+            self.timing[key] = cmb
+        tl.addLayout(tf)
+        prow = QHBoxLayout()
+        b_all = QPushButton("Show all at once")
+        b_one = QPushButton("One after the other")
+
+        def set_all(when):
+            for k, c in self.timing.items():
+                c.setCurrentIndex(c.findData(when))
+        b_all.clicked.connect(lambda: set_all("with"))
+        b_one.clicked.connect(lambda: set_all("after"))
+        for b in (b_all, b_one):
+            b.setMinimumWidth(10)
+            prow.addWidget(b)
+        tl.addLayout(prow)
+        bv.insertWidget(1, gtime)
+        tabs.addTab(self.scrolled(tower), "Tower")
+        tabs.addTab(self.scrolled(boards), "Boards")
+        tabs.addTab(self.scrolled(look), "Look")
+
+        # ---- People tab (Players, Umas, Outfits as inner tabs)
+        people = QTabWidget()
+        pl = QWidget()
+        v = QVBoxLayout(pl)
+        info = QLabel("Every trainer that appears in a race is collected here automatically.\n"
+                      "Choose a picture for each one. Trainers without a picture get their uma face.")
+        info.setWordWrap(True)
+        v.addWidget(info)
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["Trainer", "Races", "Last uma", "Picture"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
+        self.table.setColumnWidth(0, 160)
+        self.table.setColumnWidth(1, 55)
+        self.table.setColumnWidth(2, 130)
+        v.addWidget(self.table, 1)
+        br = QHBoxLayout()
+        for text, fn in (("Choose picture...", self.choose_file), ("Paste link...", self.paste_link),
+                         ("Remove picture", self.remove_pic), ("Add trainer...", self.add_trainer)):
+            b = QPushButton(text)
+            if text.startswith("Choose"):
+                b.setObjectName("primary")
+            b.clicked.connect(fn)
+            br.addWidget(b)
+        v.addLayout(br)
+        people.addTab(pl, "Players")
+
+        # ---- Umas tab (the uma pictures)
+        ut = QWidget()
+        uv = QVBoxLayout(ut)
+        uinfo = QLabel("Every uma that appears in a race is collected here. Choose your own picture for her, or "
+                       "remove it to go back to the default face. Your pictures are kept in "
+                       "<i>images/uma</i> and only change this program.")
+        uinfo.setWordWrap(True)
+        uv.addWidget(uinfo)
+        self.cb_default_faces = QCheckBox("Use the faces from Race Overlay when I have not chosen a picture")
+        self.cb_default_faces.setChecked(bool(ov.s.get("default_faces", True)))
+        self.cb_default_faces.toggled.connect(ov.set_default_faces)
+        uv.addWidget(self.cb_default_faces)
+        self.utable = QTableWidget(0, 4)
+        self.utable.setHorizontalHeaderLabels(["Face", "Uma", "Card id", "Picture"])
+        self.utable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.utable.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.utable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.utable.horizontalHeader().setStretchLastSection(True)
+        self.utable.verticalHeader().setVisible(False)
+        self.utable.verticalHeader().setDefaultSectionSize(46)
+        self.utable.setIconSize(QSize(40, 40))
+        self.utable.setAlternatingRowColors(True)
+        self.utable.setShowGrid(False)
+        self.utable.setColumnWidth(0, 56)
+        self.utable.setColumnWidth(1, 190)
+        self.utable.setColumnWidth(2, 80)
+        uv.addWidget(self.utable, 1)
+        ubr = QHBoxLayout()
+        for text, fn in (("Choose picture...", self.choose_uma_file), ("Use default face", self.remove_uma_pic),
+                         ("Add uma...", self.add_uma), ("Open folder", lambda: open_folder(ov.thumbs.uma))):
+            b = QPushButton(text)
+            if text.startswith("Choose"):
+                b.setObjectName("primary")
+            b.clicked.connect(fn)
+            ubr.addWidget(b)
+        uv.addLayout(ubr)
+        people.addTab(ut, "Umas")
+        self._uma_pix_count = -1
+
+        # ---- Outfits tab (names for alternative outfits)
+        ot = QWidget()
+        ov_l = QVBoxLayout(ot)
+        oinfo = QLabel("A uma in her normal outfit is shown with just her name. When a uma wears another outfit, "
+                       "it appears here by itself. Type a name in the <b>Name</b> column (for example "
+                       "<i>Halloween</i>) and the overlay shows <i>Meisho Doto (Halloween)</i>. "
+                       "Until you name it, it shows <i>(Alt)</i>.")
+        oinfo.setWordWrap(True)
+        ov_l.addWidget(oinfo)
+        self.otable = QTableWidget(0, 3)
+        self.otable.setHorizontalHeaderLabels(["Uma", "Outfit id", "Name (double-click to edit)"])
+        self.otable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.otable.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked
+                                    | QAbstractItemView.EditTrigger.EditKeyPressed)
+        self.otable.horizontalHeader().setStretchLastSection(True)
+        self.otable.verticalHeader().setVisible(False)
+        self.otable.setAlternatingRowColors(True)
+        self.otable.setShowGrid(False)
+        self.otable.setColumnWidth(0, 200)
+        self.otable.setColumnWidth(1, 90)
+        self._outfit_busy = False
+        self.otable.itemChanged.connect(self.on_outfit_edited)
+        ov_l.addWidget(self.otable, 1)
+        people.addTab(ot, "Outfits")
+        tabs.addTab(people, "People")
+
+        self.build_standings_tab(tabs)
+        self.build_draft_tab(tabs)
+
+        # ---- Help tab: checks and the log, so you do not need a terminal
+        stt = QWidget()
+        sv = QVBoxLayout(stt)
+        self.lbl_checks = QLabel()
+        self.lbl_checks.setWordWrap(True)
+        self.lbl_checks.setTextFormat(Qt.TextFormat.RichText)
+        self.lbl_checks.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        sv.addWidget(self.lbl_checks)
+        srow = QHBoxLayout()
+        self.cmb_log = QComboBox()
+        self.cmb_log.addItem("Log: this program", None)
+        for title, path in LOG_FILES:
+            self.cmb_log.addItem("Log: " + title, path)
+        self.cmb_log.currentIndexChanged.connect(lambda _i: self.refresh_status())
+        self.cb_fixme = QCheckBox("Hide Wine noise")
+        self.cb_fixme.setChecked(True)
+        self.cb_fixme.setVisible(not IS_WINDOWS)       # Wine messages do not exist on Windows
+        self.cb_fixme.toggled.connect(lambda _on: self.refresh_status())
+        btn_again = QPushButton("Check again")
+        btn_again.clicked.connect(lambda: self.refresh_status())
+        self.btn_copy = QPushButton("Copy for support")
+        self.btn_copy.setObjectName("primary")
+        self.btn_copy.clicked.connect(self.copy_status)
+        srow.addWidget(self.cmb_log, 1)
+        srow.addWidget(self.cb_fixme)
+        srow.addWidget(btn_again)
+        srow.addWidget(self.btn_copy)
+        sv.addLayout(srow)
+        self.txt_log = QPlainTextEdit()
+        self.txt_log.setReadOnly(True)
+        self.txt_log.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        sv.addWidget(self.txt_log, 1)
+        tabs.addTab(stt, "Help")
+        self._tabs = tabs
+        self._status_tab = stt
+        tabs.currentChanged.connect(lambda _i: self.refresh_status() if tabs.currentWidget() is stt else None)
+        self.refresh_outfits()
+        self.refresh_umas()
+
+        self.sync_widgets()
+        self.poll()
+        self.timer = QTimer(self)      # keeps the preview tick-box and trainer list up to date
+        self.timer.timeout.connect(self.poll)
+        self.timer.start(1500)
+
+    @staticmethod
+    def scrolled(widget):
+        """A tab that scrolls on small screens instead of squeezing its contents."""
+        sa = QScrollArea()
+        sa.setWidgetResizable(True)
+        sa.setFrameShape(QFrame.Shape.NoFrame)
+        sa.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        sa.setWidget(widget)
+        return sa
+
+    # ---- standings tab
+    def build_standings_tab(self, tabs):
+        ov, s = self.ov, self.ov.s
+        st = QWidget()
+        v = QVBoxLayout(st)
+        intro = QLabel("After every race each player gets points: <b>1st gets as many points as there are "
+                       "players</b>, the last one gets 1 (10 players: 10, 9, 8 ... 1). The points are added up "
+                       "and the <b>standings board</b> flips through everybody while the next race is set up. "
+                       "In OBS it is its own window: <i>" + STANDINGS_NAME + "</i>.")
+        intro.setWordWrap(True)
+        v.addWidget(intro)
+
+        cb1 = QCheckBox("Give points after every race (PTS column on the results board)")
+        cb1.setChecked(bool(s.get("scoring", True)))
+        cb1.toggled.connect(lambda on: ov.set_setting("scoring", on))
+        v.addWidget(cb1)
+        cb2 = QCheckBox("Show the standings board after the results board (stays until the next race)")
+        cb2.setChecked(bool(s.get("standings_board", True)))
+        cb2.toggled.connect(lambda on: ov.set_setting("standings_board", on))
+        v.addWidget(cb2)
+        erow = QHBoxLayout()
+        erow.addWidget(QLabel("Show it after every"))
+        sp_every = QSpinBox()
+        sp_every.setRange(0, 99)
+        sp_every.setSpecialValueText("never (only by hand)")
+        sp_every.setSuffix(" race(s)")
+        sp_every.setValue(int(s.get("standings_every", 1)))
+        sp_every.valueChanged.connect(lambda x: (ov.set_setting("standings_every", int(x)),
+                                                 ov.cfg.__setitem__("races_since_standings", 0)))
+        erow.addWidget(sp_every)
+        erow.addStretch(1)
+        v.addLayout(erow)
+        bnow = QPushButton("Show / hide the standings now")
+        bnow.clicked.connect(lambda: ov.show_standings_now())
+        v.addWidget(bnow)
+
+        box = QGroupBox("Where do the standings come from?")
+        bl = QVBoxLayout(box)
+        self.cmb_smode = QComboBox()
+        self.cmb_smode.addItem("Counted by this program", "local")
+        self.cmb_smode.addItem("A spreadsheet (link or file)", "sheet")
+        self.cmb_smode.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.cmb_smode.setMinimumContentsLength(10)
+        self.cmb_smode.setCurrentIndex(1 if s.get("standings_mode") == "sheet" else 0)
+        self.cmb_smode.currentIndexChanged.connect(
+            lambda _i: (ov.set_setting("standings_mode", self.cmb_smode.currentData()), ov.standings.refresh(True)))
+        bl.addWidget(self.cmb_smode)
+        sheetw = QWidget()
+        bl2 = QVBoxLayout(sheetw)
+        bl2.setContentsMargins(0, 0, 0, 0)
+        bl.addWidget(sheetw)
+        bl2.addWidget(QLabel("Google Sheet link, or a file:"))
+        row = QHBoxLayout()
+        self.ed_sheet = QLineEdit(s.get("standings_sheet", ""))
+        self.ed_sheet.setPlaceholderText("Google Sheets link or file path")
+        self.ed_sheet.setMinimumWidth(100)
+        self.ed_sheet.editingFinished.connect(self.apply_sheet)
+        row.addWidget(self.ed_sheet)
+        bf = QPushButton("File...")
+        bf.clicked.connect(self.choose_sheet_file)
+        row.addWidget(bf)
+        bl2.addLayout(row)
+        note = QLabel("For a Google Sheet: <b>Share</b> &rarr; General access &rarr; <i>Anyone with the link</i> "
+                      "&rarr; Viewer. The link of the tab you want (with <i>gid=</i>) picks that tab. "
+                      "The program only reads it and checks again every minute.")
+        note.setWordWrap(True)
+        bl2.addWidget(note)
+        cols = Collapsible("Columns (only if the automatic way fails)")
+        f = cols.form()
+        self.ed_tab = QLineEdit(s.get("standings_tab", ""))
+        self.ed_tab.setPlaceholderText("first tab")
+        self.ed_tab.setMinimumWidth(60)
+        self.ed_tab.editingFinished.connect(self.apply_sheet)
+        f.addRow(".xlsx tab name", self.ed_tab)
+        self.ed_cols = {}
+        for key, label, default in (("standings_name_col", "Column with the player", "B"),
+                                    ("standings_score_col", "Column with the points", "D"),
+                                    ("standings_uma_col", "Column with the uma (optional)", "C")):
+            ed = QLineEdit(str(s.get(key, default)))
+            ed.setMaximumWidth(70)
+            ed.editingFinished.connect(self.apply_sheet)
+            self.ed_cols[key] = ed
+            f.addRow(label, ed)
+        self.sp_first = QSpinBox()
+        self.sp_first.setRange(1, 999)
+        self.sp_first.setValue(int(s.get("standings_first_row", 4)))
+        self.sp_first.valueChanged.connect(lambda _v: self.apply_sheet())
+        f.addRow("First row with a player", self.sp_first)
+        bl2.addWidget(cols)
+        brow = QHBoxLayout()
+        btest = QPushButton("Read the sheet now")
+        btest.clicked.connect(self.apply_sheet)
+        brow.addWidget(btest)
+        brow.addStretch(1)
+        bl2.addLayout(brow)
+        self.lbl_sheet = QLabel("")
+        self.lbl_sheet.setWordWrap(True)
+        bl2.addWidget(self.lbl_sheet)
+        v.addWidget(box)
+
+        rbox = QGroupBox("Rounds (sheet)")
+        rl = QVBoxLayout(rbox)
+        rn = QLabel("Show one round or add rounds up, all from the same sheet tab. Single rounds read the "
+                    "round tables, added-up rounds read the <i>Final Rankings</i> table. You can also switch "
+                    "while streaming: right click the standings board or use the tray menu, <i>Standings view</i>.")
+        rn.setWordWrap(True)
+        rl.addWidget(rn)
+        rf = QFormLayout()
+        self.cmb_view = QComboBox()
+        for key, text in VIEWS:
+            self.cmb_view.addItem(text, key)
+        self.cmb_view.setCurrentIndex(max(0, self.cmb_view.findData(s.get("standings_view", "plain"))))
+        self.cmb_view.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.cmb_view.setMinimumContentsLength(10)
+        self.cmb_view.currentIndexChanged.connect(lambda _i: self.apply_view())
+        rf.addRow("Show", self.cmb_view)
+        self.ed_blocks = QLineEdit("auto" if is_auto(s.get("standings_round_blocks")) else str(s.get("standings_round_blocks")))
+        self.ed_blocks.setMinimumWidth(60)
+        self.ed_blocks.setToolTip("auto = found by the headers Trainer / Uma / Score. Or type the player, uma and points column of round 1; then round 2; then round 3, for example B,C,D; G,H,I; L,M,N")
+        self.ed_blocks.editingFinished.connect(self.apply_rounds)
+        rf.addRow("Round 1; 2; 3 (player, uma, points)", self.ed_blocks)
+        self.ed_total = QLineEdit("auto" if is_auto(s.get("standings_total_cols")) else str(s.get("standings_total_cols")))
+        self.ed_total.setMinimumWidth(60)
+        self.ed_total.setToolTip("auto = found by the headers Member / Round 1 / 2 / 3. Or type the player, round 1, round 2 and round 3 column, for example Q,R,S,T")
+        self.ed_total.editingFinished.connect(self.apply_rounds)
+        rf.addRow("Final Rankings (player, 1, 2, 3)", self.ed_total)
+        rl.addLayout(rf)
+        v.addWidget(rbox)
+
+        lbox = Collapsible("Look of the board: title, borders, avatars, pages")
+        lf = lbox.form()
+        ed_title = QLineEdit(s.get("standings_title", "STANDINGS"))
+        ed_title.setPlaceholderText("STANDINGS")
+        ed_title.editingFinished.connect(lambda: ov.set_setting("standings_title", ed_title.text().strip() or "STANDINGS"))
+        lf.addRow("Title", ed_title)
+        cb_zero = QCheckBox("Do not show players with 0 points (sheet)")
+        cb_zero.setChecked(bool(s.get("standings_hide_zero", True)))
+        cb_zero.toggled.connect(lambda on: (ov.set_setting("standings_hide_zero", on), ov.standings.apply_raw()))
+        lf.addRow("Zero points", cb_zero)
+        ed_border = QLineEdit(str(s.get("standings_border_values", "9,8,7")))
+        ed_border.setMaximumWidth(120)
+        ed_border.setToolTip("Single rounds: players with this many points get a gold, silver and bronze border")
+        ed_border.editingFinished.connect(lambda: ov.set_setting("standings_border_values", ed_border.text().strip()))
+        lf.addRow("Border: gold, silver, bronze points", ed_border)
+        sp_top = QSpinBox()
+        sp_top.setRange(0, 50)
+        sp_top.setSpecialValueText("Off")
+        sp_top.setSuffix(" players")
+        sp_top.setValue(int(s.get("standings_top_n", 10)))
+        sp_top.setToolTip("Rounds added up (and points counted by this program): the best players get a gold border")
+        sp_top.valueChanged.connect(lambda x: ov.set_setting("standings_top_n", int(x)))
+        lf.addRow("Gold border for the top", sp_top)
+        cmb_lay = QComboBox()
+        cmb_lay.addItem("Portrait (one column)", "portrait")
+        cmb_lay.addItem("Landscape (two columns)", "landscape")
+        cmb_lay.setCurrentIndex(1 if s.get("standings_layout") == "landscape" else 0)
+        cmb_lay.currentIndexChanged.connect(lambda _i: ov.set_setting("standings_layout", cmb_lay.currentData()))
+        lf.addRow("Shape", cmb_lay)
+        cb_av = QCheckBox("Show a picture for every player")
+        cb_av.setChecked(bool(s.get("standings_avatars", True)))
+        cb_av.setToolTip("Uses the picture you chose in the People tab (Players). Without one: the first letter.")
+        cb_av.toggled.connect(lambda on: ov.set_setting("standings_avatars", on))
+        lf.addRow("Avatars", cb_av)
+        sp_rows = QSpinBox()
+        sp_rows.setRange(3, 20)
+        sp_rows.setSuffix(" players")
+        sp_rows.setValue(int(s.get("standings_rows", 8)))
+        sp_rows.valueChanged.connect(lambda x: (ov.set_setting("standings_rows", int(x)), ov.standings.refresh(False)))
+        lf.addRow("Per page", sp_rows)
+        sp_page = QDoubleSpinBox()
+        sp_page.setRange(2.0, 60.0)
+        sp_page.setDecimals(0)
+        sp_page.setSuffix(" seconds")
+        sp_page.setValue(float(s.get("standings_page_seconds", 6.0)))
+        sp_page.valueChanged.connect(lambda x: ov.set_setting("standings_page_seconds", float(x)))
+        lf.addRow("Next page after", sp_page)
+        v.addWidget(lbox)
+
+        sbox = QGroupBox("Points counted by this program")
+        sl = QVBoxLayout(sbox)
+        self.lbl_book = QLabel()
+        sl.addWidget(self.lbl_book)
+        r2 = QHBoxLayout()
+        b_undo = QPushButton("Undo last race")
+        b_undo.clicked.connect(self.undo_race)
+        b_exp = QPushButton("Save as .csv...")
+        b_exp.clicked.connect(self.export_scores)
+        b_clr = QPushButton("New bracket")
+        b_clr.clicked.connect(self.clear_scores)
+        b_clr.setToolTip("Delete all counted points and start again")
+        for b in (b_undo, b_exp, b_clr):
+            b.setMinimumWidth(10)
+            r2.addWidget(b)
+        sl.addLayout(r2)
+        pn = QLabel("<i>Players are matched by trainer name. Replays, previews and old race files "
+                    "never give points, and the same race is never counted twice.</i>")
+        pn.setWordWrap(True)
+        sl.addWidget(pn)
+        v.addWidget(sbox)
+        v.addStretch(1)
+
+        def sync_smode(*_a):
+            sheet = self.cmb_smode.currentData() == "sheet"
+            sheetw.setVisible(sheet)
+            rbox.setVisible(sheet)
+            sbox.setVisible(not sheet)
+        self.cmb_smode.currentIndexChanged.connect(sync_smode)
+        sync_smode()
+        sc = self.scrolled(st)
+        self._stand_tab = sc
+        self.update_book_label()
+        tabs.addTab(sc, "Points")
+
+    # ---- draft tab (team match)
+    def build_draft_tab(self, tabs):
+        ov, s = self.ov, self.ov.s
+        m = ov.match
+        dt = QWidget()
+        v = QVBoxLayout(dt)
+        intro = QLabel("A <b>team match</b> (draft): two teams, a few players each. After every race the best placed "
+                       "<b>team players</b> score for their team: <b>1st 4 points, 2nd 2, 3rd 1</b> (you can change "
+                       "it). Players on no team (NPCs) never score, so the next team player takes the placement. "
+                       "The first team to reach the target wins. In OBS the board is its own window: "
+                       "<i>" + MATCH_NAME + "</i>.")
+        intro.setWordWrap(True)
+        v.addWidget(intro)
+
+        cb = QCheckBox("Team match mode (points go to the teams; single-player points and standings pause)")
+        cb.setChecked(bool(s.get("match_mode", False)))
+        cb.toggled.connect(lambda on: ov.set_setting("match_mode", on))
+        v.addWidget(cb)
+        cb2 = QCheckBox("Show the match board after the results board (stays until the next race)")
+        cb2.setChecked(bool(s.get("match_board", True)))
+        cb2.toggled.connect(lambda on: ov.set_setting("match_board", on))
+        v.addWidget(cb2)
+
+        rf = QFormLayout()
+        sp_t = QSpinBox()
+        sp_t.setRange(1, 999)
+        sp_t.setSuffix(" points")
+        sp_t.setValue(int(m.target))
+        sp_t.valueChanged.connect(lambda x: (m.set_rules(target=int(x)), ov.mboard.refresh()))
+        rf.addRow("First team to reach", sp_t)
+        ed_p = QLineEdit(",".join(str(x) for x in m.points))
+        ed_p.setMaximumWidth(140)
+        ed_p.setToolTip("Points for the 1st, 2nd, 3rd ... team player, for example 4,2,1")
+        ed_p.editingFinished.connect(lambda: (m.set_rules(points=ed_p.text()),
+                                              ed_p.setText(",".join(str(x) for x in m.points)),
+                                              self.update_match_label()))
+        rf.addRow("Points for 1st, 2nd, 3rd", ed_p)
+        v.addLayout(rf)
+
+        self._team_edits = []
+        for i in range(2):
+            box = QGroupBox("Team %d" % (i + 1))
+            bl = QVBoxLayout(box)
+            top = QHBoxLayout()
+            ed_n = QLineEdit(m.teams[i]["name"])
+            ed_n.setPlaceholderText("Team name")
+            ed_n.setMinimumWidth(80)
+            btn_c = QPushButton()
+            btn_c.setMaximumWidth(110)
+            self.swatch(btn_c, m.teams[i]["color"])
+            top.addWidget(ed_n, 1)
+            top.addWidget(btn_c)
+            bl.addLayout(top)
+            pl = QHBoxLayout()
+            col1, col2 = QVBoxLayout(), QVBoxLayout()
+            col1.addWidget(QLabel("Players (trainer names, one per line)"))
+            ed_pl = QPlainTextEdit("\n".join(m.teams[i]["players"]))
+            ed_pl.setFixedHeight(92)
+            col1.addWidget(ed_pl)
+            b_add = QPushButton("Add a player seen in a race...")
+            col1.addWidget(b_add)
+            col2.addWidget(QLabel("Drafted umas (one per line)"))
+            ed_pk = QPlainTextEdit("\n".join(m.teams[i]["picks"]))
+            ed_pk.setFixedHeight(92)
+            col2.addWidget(ed_pk)
+            b_pk = QPushButton("Add a uma...")
+            col2.addWidget(b_pk)
+            pl.addLayout(col1)
+            pl.addLayout(col2)
+            bl.addLayout(pl)
+            v.addWidget(box)
+
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(500)
+
+            def save(i=i, ed_n=ed_n, ed_pl=ed_pl, ed_pk=ed_pk):
+                m.set_team(i, name=ed_n.text(), players=ed_pl.toPlainText(), picks=ed_pk.toPlainText())
+                ov.mboard.refresh()
+                self.update_match_label()
+            timer.timeout.connect(save)
+            for w in (ed_n, ed_pl, ed_pk):
+                w.textChanged.connect(lambda *_a, t=timer: t.start())
+            btn_c.clicked.connect(lambda _c=False, i=i, b=btn_c: self.pick_team_color(i, b))
+            b_add.clicked.connect(lambda _c=False, ed=ed_pl: self.add_seen_player(ed))
+            b_pk.clicked.connect(lambda _c=False, ed=ed_pk: self.add_seen_uma(ed))
+            self._team_edits.append((ed_n, ed_pl, ed_pk))
+
+        sbox = QGroupBox("Score")
+        sl = QVBoxLayout(sbox)
+        self.lbl_match = QLabel()
+        self.lbl_match.setWordWrap(True)
+        sl.addWidget(self.lbl_match)
+        r1 = QHBoxLayout()
+        b_undo = QPushButton("Undo last race")
+        b_undo.clicked.connect(self.match_undo)
+        b_adj = QPushButton("Add or take points...")
+        b_adj.setToolTip("A ruling by hand: a remake, a penalty, a disconnect that was ruled on.")
+        b_adj.clicked.connect(self.match_adjust)
+        b_new = QPushButton("New match")
+        b_new.setToolTip("Forget all races and rulings. The teams, players and drafted umas stay.")
+        b_new.clicked.connect(self.match_new)
+        b_exp = QPushButton("Save as .csv...")
+        b_exp.clicked.connect(self.match_export)
+        for b in (b_undo, b_adj, b_new, b_exp):
+            b.setMinimumWidth(10)
+            r1.addWidget(b)
+        sl.addLayout(r1)
+        nn = QLabel("<i>Players are matched by trainer name (capital letters do not matter). Replays, previews and "
+                    "old race files never give points, and the same race is never counted twice.</i>")
+        nn.setWordWrap(True)
+        sl.addWidget(nn)
+        v.addWidget(sbox)
+
+        gl = QGroupBox("Board")
+        gf = QFormLayout(gl)
+        ed_bt = QLineEdit(s.get("match_title", ""))
+        ed_bt.setPlaceholderText("TEAM MATCH")
+        ed_bt.editingFinished.connect(lambda: (ov.set_setting("match_title", ed_bt.text().strip()), ov.mboard.update()))
+        gf.addRow("Title", ed_bt)
+        cb_pk = QCheckBox("Show the drafted umas")
+        cb_pk.setChecked(bool(s.get("match_show_picks", True)))
+        cb_pk.toggled.connect(lambda on: (ov.set_setting("match_show_picks", on), ov.mboard.refresh()))
+        gf.addRow("Drafted umas", cb_pk)
+        sp_ms = QDoubleSpinBox()
+        sp_ms.setRange(0.0, 300.0)
+        sp_ms.setDecimals(0)
+        sp_ms.setSpecialValueText("Until the next race")
+        sp_ms.setSuffix(" seconds")
+        sp_ms.setValue(float(s.get("match_seconds", 0.0)))
+        sp_ms.valueChanged.connect(lambda x: ov.set_setting("match_seconds", float(x)))
+        gf.addRow("Stays", sp_ms)
+        v.addWidget(gl)
+        v.addStretch(1)
+        sc = self.scrolled(dt)
+        self._draft_tab = sc
+        self.update_match_label()
+        tabs.addTab(sc, "Draft")
+
+    def pick_team_color(self, i, btn):
+        c = QColorDialog.getColor(QColor(self.ov.match.teams[i]["color"]), self, "Team colour")
+        if c.isValid():
+            self.ov.match.set_team(i, color=c.name())
+            self.swatch(btn, c.name())
+            self.ov.mboard.refresh()
+
+    def add_seen_player(self, ed):
+        names = [n for n, _d in self.ov.players.rows()]
+        if not names:
+            QMessageBox.information(self, "No players yet", "Players show up here after the overlay has seen a race. "
+                                    "You can also type the trainer names, one per line.")
+            return
+        name, ok = QInputDialog.getItem(self, "Add a player", "Trainer seen in a race:", names, 0, False)
+        if ok and name:
+            ed.setPlainText((ed.toPlainText().rstrip() + "\n" + name).strip())
+
+    def add_seen_uma(self, ed):
+        names = sorted({r[2] for r in self.ov.umas.rows() if r[2]})
+        if names:
+            name, ok = QInputDialog.getItem(self, "Add a uma", "Uma:", names, 0, True)
+        else:
+            name, ok = QInputDialog.getText(self, "Add a uma", "Uma name:")
+        if ok and name.strip():
+            ed.setPlainText((ed.toPlainText().rstrip() + "\n" + name.strip()).strip())
+
+    def update_match_label(self):
+        m = self.ov.match
+        a, b = m.totals()
+        w = m.winner()
+        text = "<b>%s</b> %d &nbsp;:&nbsp; %d <b>%s</b> &nbsp; (first to %d)" % (
+            m.teams[0]["name"], a, b, m.teams[1]["name"], m.target)
+        if w is not None:
+            text += "<br><b>%s wins!</b>" % m.teams[w]["name"]
+        rows = m.race_rows()
+        text += "<br>" + (", ".join("%s %+d / %+d" % (lab, da, db) if lab == "Ruling" else "%s %d / %d" % (lab, da, db)
+                                    for lab, da, db in rows) if rows else "No race scored yet.")
+        if not m.ready():
+            text += "<br><i>Add at least one player to each team, or nobody will score.</i>"
+        self.lbl_match.setText(text)
+
+    def match_undo(self):
+        if self.ov.match.undo_last():
+            self.ov.mboard.refresh()
+        self.update_match_label()
+
+    def match_adjust(self):
+        m = self.ov.match
+        team, ok = QInputDialog.getItem(self, "Add or take points", "Team:", [t["name"] for t in m.teams], 0, False)
+        if not ok:
+            return
+        pts, ok = QInputDialog.getInt(self, "Add or take points", "Points (negative takes away):", 1, -999, 999)
+        if not ok or pts == 0:
+            return
+        note, _ok = QInputDialog.getText(self, "Add or take points", "Reason (optional):")
+        m.adjust([t["name"] for t in m.teams].index(team), pts, note)
+        self.ov.mboard.refresh()
+        self.update_match_label()
+
+    def match_new(self):
+        if QMessageBox.question(self, "New match", "Forget all races and rulings of this match?\n"
+                                "The teams, players and drafted umas stay.") == QMessageBox.StandardButton.Yes:
+            self.ov.match.new_match()
+            self.ov.mboard.refresh()
+            self.update_match_label()
+
+    def match_export(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save the match as .csv", "match.csv", "CSV (*.csv)")
+        if path:
+            self.ov.match.export_csv(path)
+
+    def apply_sheet(self):
+        ov = self.ov
+        ov.s["standings_sheet"] = self.ed_sheet.text().strip()
+        ov.s["standings_tab"] = self.ed_tab.text().strip()
+        for k, ed in self.ed_cols.items():
+            ov.s[k] = ed.text().strip().upper()
+        ov.s["standings_first_row"] = int(self.sp_first.value())
+        ov.save_settings()
+        if ov.s.get("standings_mode") != "sheet":
+            self.cmb_smode.setCurrentIndex(1)        # reading a sheet only makes sense in sheet mode
+        ov.standings.refresh(True)
+        self.lbl_sheet.setText("Reading...")
+
+    def apply_view(self):
+        self.ov.set_standings_view(self.cmb_view.currentData())
+        self.cmb_smode.blockSignals(True)
+        self.cmb_smode.setCurrentIndex(1)
+        self.cmb_smode.blockSignals(False)
+        self.lbl_sheet.setText("Reading...")
+
+    def apply_rounds(self):
+        ov = self.ov
+        ov.s["standings_round_blocks"] = self.ed_blocks.text().strip().upper()
+        ov.s["standings_total_cols"] = self.ed_total.text().strip().upper()
+        ov.save_settings()
+        ov.standings.refresh(True)
+        ov.standings.apply_raw()
+        self.lbl_sheet.setText("Reading...")
+
+    def choose_sheet_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Choose the score file", os.path.expanduser("~"),
+                                              "Score files (*.csv *.xlsx *.xlsm);;All files (*)")
+        if path:
+            self.ed_sheet.setText(path)
+            self.apply_sheet()
+
+    def update_book_label(self):
+        b = self.ov.book
+        self.lbl_book.setText("%d race%s scored, %d players." % (len(b.races), "" if len(b.races) == 1 else "s",
+                                                               len(b.totals())))
+
+    def undo_race(self):
+        self.ov.book.undo_last()
+        self.ov.standings.refresh(True)
+        self.update_book_label()
+
+    def export_scores(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save the points", os.path.expanduser("~/standings.csv"), "CSV (*.csv)")
+        if path:
+            self.ov.book.export_csv(path)
+
+    def clear_scores(self):
+        if QMessageBox.question(self, "New bracket", "Delete all counted points and start again?") == \
+                QMessageBox.StandardButton.Yes:
+            self.ov.book.clear()
+            self.ov.standings.refresh(True)
+            self.update_book_label()
+
+    # ---- races tab
+    def races_folder(self):
+        return os.path.expanduser(self.ed_races.text().strip())
+
+    def update_source_label(self):
+        ov = self.ov
+        names = {"live": "Live (from Race Overlay)", "watch": "Saved races folder", "demo": "Demo file"}
+        kind, folder = choose_source(ov.args, ov.s, ov.cfg)
+        text = "Running now: <b>%s</b>." % names.get(ov.source_kind, ov.source_kind)
+        if kind != ov.source_kind:
+            text += "<br>After a restart: <b>%s</b>." % names.get(kind, kind)
+        if kind == "watch" and not folder:
+            text += "<br><span style='color:%s'>Choose the saved races folder below first.</span>" % THEME["yellow"]
+        self.lbl_source.setText(text)
+
+    def refresh_count(self):
+        folder = self.races_folder()
+        if not folder:
+            self.lbl_found.setText("No folder chosen yet.")
+            return
+        if not os.path.isdir(folder):
+            self.lbl_found.setText("<span style='color:%s'>That folder was not found.</span>" % THEME["pink"])
+            return
+        if self.count_job is not None and self.count_job.isRunning():
+            self._count_again = True
+            return
+        sub = self.cb_sub.isChecked()
+        self.lbl_found.setText("Looking...")
+        self.count_job = Job(lambda: count_race_files(folder, sub))
+        self.count_job.done.connect(self.on_count)
+        self.count_job.failed.connect(lambda msg: self.lbl_found.setText("Could not read the folder: " + msg))
+        self.count_job.start()
+
+    def on_count(self, res):
+        files, folders = res
+        if files:
+            self.lbl_found.setText("<span style='color:%s'>Found %d .json file%s in %d folder%s.</span>"
+                                   % (THEME["mint"], files, "" if files == 1 else "s", folders,
+                                      "" if folders == 1 else "s"))
+        else:
+            self.lbl_found.setText("<span style='color:%s'>No .json files found there yet.</span>" % THEME["yellow"])
+        if self._count_again:
+            self._count_again = False
+            self.refresh_count()
+
+    def apply_choice(self):
+        """Tell the program about the new source / folder; restart it when that is needed."""
+        ov = self.ov
+        self.update_source_label()
+        kind, folder = choose_source(ov.args, ov.s, ov.cfg)
+        if kind == "watch" and not folder:
+            return                       # nothing to watch yet: wait until a folder is chosen
+        if ov.apply_source_choice():
+            self.update_source_label()
+            return
+        if QMessageBox.question(self, "Restart",
+                                "The program has to restart to use the new choice.\nRestart now?"
+                                ) == QMessageBox.StandardButton.Yes:
+            ov.restart_now()
+
+    def on_source(self, idx):
+        self.ov.set_setting("source", SOURCE_CHOICES[idx][0])
+        self.apply_choice()
+
+    def set_races_folder(self, path):
+        self.ed_races.setText(path)
+        self.ov.set_setting("saved_races_dir", path)
+        self.refresh_count()
+        ov = self.ov
+        if path and os.path.isdir(path) and choose_source(ov.args, ov.s, ov.cfg)[0] == "live" \
+                and ov.source_kind == "live":
+            if QMessageBox.question(self, "Saved races",
+                                    "The overlay is using Live mode right now.\n"
+                                    "Use the saved races folder instead?") == QMessageBox.StandardButton.Yes:
+                ov.set_setting("source", "watch")
+                self.cmb_source.setCurrentIndex(2)
+        self.apply_choice()
+
+    def on_races_text(self):
+        path = self.ed_races.text().strip()
+        if path != self.ov.s.get("saved_races_dir", ""):
+            self.set_races_folder(path)
+
+    def browse_races(self):
+        start = self.races_folder() if os.path.isdir(self.races_folder()) else os.path.expanduser("~")
+        path = QFileDialog.getExistingDirectory(self, "Choose the Saved races folder", start)
+        if path:
+            self.set_races_folder(path)
+
+    def on_subfolders(self, on):
+        self.ov.set_setting("watch_subfolders", bool(on))
+        self.refresh_count()
+        self.apply_choice()
+
+    def open_races_folder(self):
+        folder = self.races_folder()
+        if folder and os.path.isdir(folder):
+            open_folder(folder)
+        else:
+            QMessageBox.information(self, "Saved races", "Choose the folder first (Browse...).")
+
+    # ---- updates
+    def ask_install(self, files, source, restart=True):
+        try:
+            new_ver = check_update_files(files)
+        except ValueError as e:
+            QMessageBox.warning(self, "Update", str(e))
+            return False
+        if version_tuple(new_ver) < version_tuple(APP_VERSION):
+            q = "%s contains version %s, which is OLDER than your version %s.\nInstall it anyway?" % (source, new_ver, APP_VERSION)
+        elif version_tuple(new_ver) == version_tuple(APP_VERSION):
+            q = "%s is the same version as yours (%s).\nInstall it anyway?" % (source, new_ver)
+        else:
+            q = "Update from version %s to %s?" % (APP_VERSION, new_ver)
+        q += "\n\nFiles: " + ", ".join(sorted(n for n in files if is_update_path(n)))
+        q += "\nYour pictures and settings are kept. The old files are backed up first."
+        if QMessageBox.question(self, "Update", q) != QMessageBox.StandardButton.Yes:
+            return False
+        if FROZEN:
+            QMessageBox.information(self, "Update", "This Windows program is a packaged .exe, so it cannot replace "
+                                    "its own files.\n\nDownload the new zip from the GitHub releases page, unzip it, "
+                                    "and copy your 'images' folder into the new folder.")
+            QDesktopServices.openUrl(QUrl(RELEASES_URL))
+            return False
+        try:
+            replaced, backup = install_update(files, SCRIPT_DIR)
+        except OSError as e:
+            QMessageBox.warning(self, "Update", "Could not write the files:\n%s" % e)
+            return False
+        self.lbl_update.setText("Updated to %s (%d files). Backup: %s" % (new_ver, len(replaced), backup))
+        if restart:
+            QMessageBox.information(self, "Update", "Updated to version %s.\nThe program restarts now." % new_ver)
+            self.ov.restart_now()
+        return True
+
+    def update_from_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Choose the new version", os.path.expanduser("~"),
+                                              "Update (*.zip *.py)")
+        if not path:
+            return
+        try:
+            files = read_update_file(path)
+        except Exception as e:
+            QMessageBox.warning(self, "Update", "Could not read that file:\n%s" % e)
+            return
+        self.ask_install(files, os.path.basename(path))
+
+    def run_job(self, fn, on_done):
+        self.job = Job(fn)
+        self.job.done.connect(on_done)
+        self.job.failed.connect(self.job_failed)
+        self.job.start()
+
+    def job_failed(self, msg):
+        self.btn_check.setEnabled(True)
+        self.lbl_update.setText("Update problem: " + msg)
+
+    def check_online(self):
+        url = self.ed_url.text().strip()
+        self.ov.set_setting("update_url", url)
+        if not url:
+            QMessageBox.information(self, "Update link", "Paste the update link (latest.json) first.")
+            return
+        self.btn_check.setEnabled(False)
+        self.btn_install.setVisible(False)
+        self.lbl_update.setText("Checking...")
+        self.run_job(lambda: fetch_manifest(url), self.on_manifest)
+
+    def on_manifest(self, m):
+        self.btn_check.setEnabled(True)
+        ver = str(m.get("version"))
+        if version_tuple(ver) > version_tuple(APP_VERSION):
+            self.pending = m
+            notes = m.get("notes", "")
+            self.lbl_update.setText("New version %s is available.%s" % (ver, ("\n" + notes) if notes else ""))
+            self.btn_install.setText("Install version %s" % ver)
+            self.btn_install.setVisible(True)
+        else:
+            self.lbl_update.setText("You have the newest version (%s)." % APP_VERSION)
+
+    def install_online(self):
+        if not self.pending:
+            return
+        m = self.pending
+        self.btn_install.setEnabled(False)
+        self.lbl_update.setText("Downloading...")
+
+        def got(files):
+            self.btn_install.setEnabled(True)
+            if self.ask_install(files, "The download"):
+                self.btn_install.setVisible(False)
+            else:
+                self.lbl_update.setText("Update cancelled.")
+        self.run_job(lambda: download_update(m), got)
+
+    # ---- look helpers
+    def swatch(self, btn, color):
+        btn.setText(color)
+        c = QColor(color)
+        fg = "#000000" if c.lightness() > 128 else "#ffffff"
+        btn.setStyleSheet("background-color:%s;color:%s;border:2px solid rgba(255,255,255,90);border-radius:10px;"
+                          "padding:6px;font-weight:700;" % (color, fg))
+
+    def sync_widgets(self):
+        s = self.ov.s
+        self.swatch(self.btn_bg, s["bg"])
+        self.swatch(self.btn_tc, s["text_color"])
+        self.swatch(self.btn_sc, s["sub_color"])
+        self.swatch(self.btn_ac, s.get("accent") or "#f5c518")
+        self.lbl_size.setText("%d%%" % int(float(s["text_scale"]) * 100))
+
+    def pick(self, key, btn):
+        c = QColorDialog.getColor(QColor(self.ov.s[key]), self, "Choose colour")
+        if c.isValid():
+            self.ov.set_setting(key, c.name())
+            self.swatch(btn, c.name())
+
+    def on_theme(self, i):
+        if i <= 0:
+            return
+        self.ov.apply_theme(self.cmb_theme.itemText(i))
+        self.sync_widgets()
+
+    def on_size(self, v):
+        self.lbl_size.setText("%d%%" % v)
+        self.ov.set_setting("text_scale", v / 100.0)
+
+    def on_font(self, *_):
+        use_default = self.cb_deffont.isChecked()
+        self.font_box.setEnabled(not use_default)
+        self.ov.set_setting("font", "" if use_default else self.font_box.currentFont().family())
+
+    def reset(self):
+        self.ov.reset_settings()
+        s = self.ov.s
+        self.cb_top.setChecked(s["on_top"])
+        self.cb_hide.setChecked(bool(s.get("auto_hide", True)))
+        self.cmb_slide.setCurrentIndex(0)
+        self.cb_title.setChecked(s["title_bar"])
+        self.cmb_avatar.setCurrentIndex(0)
+        self.sl_op.setValue(int(s["bg_opacity"] * 100))
+        self.sl_size.setValue(int(s["text_scale"] * 100))
+        self.cb_deffont.setChecked(True)
+        self.cb_arrows.setChecked(bool(s["rank_arrows"]))
+        self.sp_rows.setValue(int(s["max_rows"]))
+        self.cmb_style.setCurrentIndex(0)
+        self.sp_crow.setValue(int(s["compact_rows"]))
+        self.cmb_theme.setCurrentIndex(0)
+        self.sync_widgets()
+
+    def show_tab(self, name):
+        for i in range(self._tabs.count()):
+            if self._tabs.tabText(i) == name:
+                self._tabs.setCurrentIndex(i)
+                return
+
+    def poll(self):
+        ov = self.ov
+        dot = STATE_COLORS.get("green" if ov.racing else ov.state, "#f1c40f")
+        if ov.racing:
+            dot = "#3498db"
+        self.lbl_state.setText('<span style="color:%s">&#9679;</span> %s' % (dot, ov.status_summary().replace("\n", " ")))
+        if ov.auto_hide_active():
+            self.btn_show.setText("Done placing: hide the window" if ov.pinned else "Show overlay window (to place it)")
+            self.note_show.setText("The overlay window is hidden until a race starts, then the tower slides in "
+                                   "and slides out again after the race. Press the button to show the window "
+                                   "while you move it to where you want it.")
+        else:
+            self.btn_show.setText("Hide overlay window" if ov.isVisible() else "Show overlay window")
+            self.note_show.setText("OBS can only capture the overlay while its window is shown. "
+                                   "Press the button once and the choice is remembered for the next start.")
+        self.btn_prev2.setText("Stop preview" if ov.preview else "Show preview race")
+        self.btn_board.setText("Done placing: hide the results board" if ov.board.pinned
+                               else "Show results board (to place it)")
+        self.btn_stand.setText("Done placing: hide the standings board" if ov.standings.pinned
+                               else "Show standings board (to place it)")
+        self.btn_luck.setText("Done placing: hide the skill luck board" if ov.luck.pinned
+                              else "Show skill luck board (to place it)")
+        self.btn_match.setText("Done placing: hide the match board" if ov.mboard.pinned
+                               else "Show match board (to place it)")
+        if self.isVisible() and self._tabs.currentWidget() is self._draft_tab:
+            self.update_match_label()
+        if self.isVisible() and self._tabs.currentWidget() is self._stand_tab:
+            self.lbl_sheet.setText(ov.standings.status or "")
+            self.update_book_label()
+        self.cb_prev.blockSignals(True)
+        self.cb_prev.setChecked(self.ov.preview)
+        self.cb_prev.blockSignals(False)
+        if self.isVisible() and self.ov.players.reload_if_changed():
+            self.refresh_players()
+        if self.isVisible() and self._tabs.currentWidget() is self._status_tab:
+            self.refresh_status()
+        if self.isVisible() and len(self.ov.pix) != self._uma_pix_count:
+            self.refresh_umas()           # new faces have finished loading
+
+    # ---- players helpers
+    def selected(self):
+        r = self.table.currentRow()
+        it = self.table.item(r, 0) if r >= 0 else None
+        if it is None:
+            QMessageBox.information(self, "Pick a trainer", "Click a trainer in the list first.")
+            return None
+        return it.text()
+
+    def refresh_outfits(self):
+        self._outfit_busy = True
+        rows = self.ov.outfits.rows()
+        self.otable.setRowCount(len(rows))
+        for i, (did, uma, label) in enumerate(rows):
+            shown = label or BUILTIN_OUTFITS.get(did, "")
+            cells = (uma, str(did), shown)
+            for c, text in enumerate(cells):
+                it = QTableWidgetItem(text)
+                if c < 2:
+                    it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.otable.setItem(i, c, it)
+        self._outfit_busy = False
+
+    def on_outfit_edited(self, item):
+        if self._outfit_busy or item.column() != 2:
+            return
+        id_item = self.otable.item(item.row(), 1)
+        if id_item is None:
+            return
+        try:
+            did = int(id_item.text())
+        except ValueError:
+            return
+        self.ov.outfits.set_label(did, item.text())
+        for h in self.ov.horses:                       # a race on screen follows the new name at once
+            h.label = self.ov.outfits.display(h.name, h.chara_id, h.dress_id)
+        self.ov.update()
+
+    def refresh_players(self):
+        keep = None
+        r = self.table.currentRow()
+        if r >= 0 and self.table.item(r, 0):
+            keep = self.table.item(r, 0).text()
+        rows = self.ov.players.rows()
+        self.table.setRowCount(len(rows))
+        for i, (name, d) in enumerate(rows):
+            img = d.get("image", "")
+            if not img:
+                shown = "(uma face)"
+            elif img.lower().startswith(("http://", "https://")):
+                shown = "link: " + img
+            else:
+                shown = "file: " + os.path.basename(img)
+            for c, text in enumerate((name, str(d.get("seen", 0)), d.get("last_uma", ""), shown)):
+                self.table.setItem(i, c, QTableWidgetItem(text))
+            if name == keep:
+                self.table.selectRow(i)
+
+    def choose_file(self):
+        name = self.selected()
+        if not name:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Choose a picture for " + name, os.path.expanduser("~"),
+                                              "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif)")
+        if path:
+            self.ov.set_player_image_file(name, path)
+            self.refresh_players()
+
+    def paste_link(self):
+        name = self.selected()
+        if not name:
+            return
+        url, ok = QInputDialog.getText(self, "Picture link", "Link to a picture of %s (https://...):" % name)
+        if ok and url.strip().lower().startswith(("http://", "https://")):
+            self.ov.set_player_image_url(name, url.strip())
+            self.refresh_players()
+        elif ok:
+            QMessageBox.warning(self, "Not a link", "The link must start with http:// or https://")
+
+    def remove_pic(self):
+        name = self.selected()
+        if name:
+            self.ov.clear_player_image(name)
+            self.refresh_players()
+
+    # ---- status tab
+    CHECK_COLORS = {"ok": "#2ecc71", "bad": "#ff5c6c", "warn": "#f1c40f", "info": "#9aa0b4"}
+
+    def log_text(self, max_lines=400):
+        path = self.cmb_log.currentData()
+        if path is None:
+            return "\n".join(logbuf.lines()[-max_lines:])
+        text = read_tail(path, max_lines, self.cb_fixme.isChecked())
+        return text or "(no log yet: %s)" % path
+
+    def refresh_status(self):
+        rows = []
+        for state, title, hint in run_checks(self.ov):
+            line = '<span style="color:%s">&#9679;</span> %s' % (self.CHECK_COLORS.get(state, "#9aa0b4"), title)
+            if hint:
+                line += '<br><span style="color:#9aa0b4">&nbsp;&nbsp;&nbsp;&nbsp;%s</span>' % hint
+            rows.append(line)
+        html = "<br>".join(rows)
+        if html != getattr(self, "_checks_html", None):
+            self._checks_html = html
+            self.lbl_checks.setText(html)
+        text = self.log_text()
+        if text == getattr(self, "_log_shown", None):
+            return
+        self._log_shown = text
+        sb = self.txt_log.verticalScrollBar()
+        at_bottom = sb.value() >= sb.maximum() - 4
+        keep = sb.value()
+        self.txt_log.setPlainText(text)
+        sb.setValue(sb.maximum() if at_bottom else keep)
+
+    def copy_status(self):
+        parts = ["%s %s" % (APP_NAME, APP_VERSION)]
+        for state, title, hint in run_checks(self.ov):
+            parts.append("[%s] %s%s" % (state, title, (" - " + hint) if hint else ""))
+        parts.append("")
+        parts.append("--- %s ---" % self.cmb_log.currentText())
+        parts.append(self.log_text(80))
+        QApplication.clipboard().setText("\n".join(parts))
+        self.btn_copy.setText("Copied!")
+        QTimer.singleShot(1500, lambda: self.btn_copy.setText("Copy for support"))
+
+    # ---- uma pictures helpers
+    def refresh_umas(self):
+        ov = self.ov
+        keep = None
+        r = self.utable.currentRow()
+        if r >= 0 and self.utable.item(r, 2):
+            keep = self.utable.item(r, 2).text()
+        rows = ov.umas.rows()
+        self.utable.setRowCount(len(rows))
+        for i, (card, chara, name, seen) in enumerate(rows):
+            key = "c:%d" % card
+            if key not in ov.pix and key not in ov.pix_pending:
+                ov.want_img(key, {"kind": "uma", "card_id": card, "chara_id": chara, "name": name})
+            face = QTableWidgetItem()
+            pm = ov.pix.get(key)
+            if pm is not None and not pm.isNull():
+                face.setIcon(QIcon(pm))
+            own = ov.uma_own_picture(card)
+            shown = "mine: " + os.path.basename(own) if own else ("default" if ov.thumbs.use_default else "(none)")
+            self.utable.setItem(i, 0, face)
+            for c, text in enumerate((name, str(card), shown), start=1):
+                self.utable.setItem(i, c, QTableWidgetItem(text))
+            if str(card) == keep:
+                self.utable.selectRow(i)
+        self._uma_pix_count = len(ov.pix)
+
+    def selected_uma(self):
+        r = self.utable.currentRow()
+        it = self.utable.item(r, 2) if r >= 0 else None
+        if it is None:
+            QMessageBox.information(self, "Pick a uma", "Click a uma in the list first.")
+            return None, ""
+        return int(it.text()), self.utable.item(r, 1).text()
+
+    def choose_uma_file(self):
+        card, name = self.selected_uma()
+        if not card:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Choose a picture for " + name, os.path.expanduser("~"),
+                                              "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif)")
+        if path:
+            self.ov.set_uma_image_file(card, path)
+            self.refresh_umas()
+
+    def remove_uma_pic(self):
+        card, _ = self.selected_uma()
+        if card:
+            self.ov.clear_uma_image(card)
+            self.refresh_umas()
+
+    def add_uma(self):
+        text, ok = QInputDialog.getText(self, "Add uma", "Card id (a number like 100101):")
+        if not ok or not text.strip().isdigit():
+            if ok:
+                QMessageBox.warning(self, "Not a number", "The card id is a number, for example 100101.")
+            return
+        card = int(text.strip())
+        name, ok = QInputDialog.getText(self, "Add uma", "Name of the uma:")
+        if ok and name.strip():
+            self.ov.umas.add(card, name.strip())
+            self.refresh_umas()
+
+    def add_trainer(self):
+        name, ok = QInputDialog.getText(self, "Add trainer", "Trainer name (exactly as shown in the race):")
+        if ok and name.strip():
+            self.ov.players.add(name.strip())
+            self.refresh_players()
+
+    def closeEvent(self, ev):
+        if self.ov.preview:
+            self.ov.set_preview(False)
+        ev.accept()

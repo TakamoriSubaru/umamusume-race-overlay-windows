@@ -1,0 +1,28 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Local files (not part of the project)
+backup/
+images/
+*.new
+*.log
+
+# Big downloads: do not commit these
+tools/
+*.AppImage
+*.exe
+
+# The original Race Overlay is someone else's program: never upload it
+Race Overlay/
+Race Overlay*/
+server.exe
+*.pak
+*.dll
+
+# Windows build output
+dist/
+build/
+*.spec
