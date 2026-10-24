@@ -21,6 +21,8 @@ The overlay draws the race as normal windows that OBS captures with **Window Cap
 
 ## 📥 Install
 
+**New here? Read the [step by step guide](GUIDE.md).**
+
 1. Open **Releases** on this page and download **`race-overlay-windows-X.Y.Z.zip`**.
 2. Unzip it anywhere (right click, *Extract All*; do not run it from inside the zip).
 3. Start **`UmaRaceOverlay.exe`**. No Python and no installer needed.
