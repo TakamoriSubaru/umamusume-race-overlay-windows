@@ -24,6 +24,7 @@ from .constants import (
     KEEP_ON_RESET,
     PODIUM,
     ROW_H,
+    IMAGES_DIR,
     SCRIPT_DIR,
     SLIDE_SECONDS,
     STATE_COLORS,
@@ -147,7 +148,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self._drag = None
         self._last_tick = time.monotonic()
 
-        images_dir = os.path.expanduser(args.images_dir) if args.images_dir else os.path.join(SCRIPT_DIR, "images")
+        images_dir = os.path.expanduser(args.images_dir) if args.images_dir else IMAGES_DIR
         extra = [os.path.expanduser(args.thumbs_dir)] if args.thumbs_dir else []
         extra += find_wine_thumb_dirs()
         self.thumbs = ImageStore(self.base, images_dir, extra)

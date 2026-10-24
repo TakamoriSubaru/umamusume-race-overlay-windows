@@ -22,7 +22,7 @@ LUCK_NAME = "Umamusume Skill Luck (%s)" % PLATFORM        # window name of the s
 RESULTS_NAME = "Umamusume Race Results (%s)" % PLATFORM   # window name of the results board (pick it in OBS)
 
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 
 SLIDE_SECONDS = 0.45       # how long the tower takes to slide in / out
@@ -75,6 +75,21 @@ if FROZEN:      # the packaged Windows program: icon.png and the images folder s
     SCRIPT_DIR = os.path.dirname(os.path.abspath(sys.executable))
 else:
     SCRIPT_DIR = os.path.dirname(PACKAGE_DIR)   # the program folder (next to race_overlay_native.py)
+
+
+def _default_images_dir():
+    """Where your pictures live. The packaged Windows program keeps them in the settings folder, so a new
+    version never loses them. An 'images' folder next to the .exe (version 1.0.0) is still used if it has files."""
+    if not FROZEN:
+        return os.path.join(SCRIPT_DIR, "images")
+    old = os.path.join(SCRIPT_DIR, "images")
+    new = os.path.join(CONFIG_DIR, "images")
+    if not os.path.isdir(new) and os.path.isdir(old) and any(os.scandir(old)):
+        return old
+    return new
+
+
+IMAGES_DIR = _default_images_dir()
 
 
 IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif")

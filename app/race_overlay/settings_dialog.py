@@ -54,7 +54,7 @@ from .updater import (
     version_tuple,
 )
 from .sheets import VIEWS, is_auto
-from .images import find_file_ci
+from .images import export_pictures, find_file_ci, import_pictures
 from .util import open_folder
 
 
@@ -280,6 +280,15 @@ class SettingsDialog(QDialog):
             bo = QPushButton("Open folder")
             bo.clicked.connect(lambda _=False, pth=path: open_folder(pth))
             bl.addWidget(bo)
+        prow = QHBoxLayout()
+        bimp = QPushButton("Import pictures from a zip...")
+        bimp.setToolTip("A zip a friend made with 'Save my pictures as a zip'")
+        bimp.clicked.connect(self.import_pics)
+        bexp = QPushButton("Save my pictures as a zip...")
+        bexp.clicked.connect(self.export_pics)
+        prow.addWidget(bimp)
+        prow.addWidget(bexp)
+        bl.addLayout(prow)
         mm.addWidget(box)
 
         ubox = QGroupBox("Updates  (current version %s)" % APP_VERSION)
@@ -1442,7 +1451,7 @@ class SettingsDialog(QDialog):
         if FROZEN:
             QMessageBox.information(self, "Update", "This Windows program is a packaged .exe, so it cannot replace "
                                     "its own files.\n\nDownload the new zip from the GitHub releases page, unzip it, "
-                                    "and copy your 'images' folder into the new folder.")
+                                    "and start it. Your pictures and settings are kept.")
             QDesktopServices.openUrl(QUrl(RELEASES_URL))
             return False
         try:
@@ -1742,6 +1751,35 @@ class SettingsDialog(QDialog):
         QApplication.clipboard().setText("\n".join(parts))
         self.btn_copy.setText("Copied!")
         QTimer.singleShot(1500, lambda: self.btn_copy.setText("Copy for support"))
+
+    # ---- share pictures
+    def import_pics(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Choose the pictures zip", os.path.expanduser("~"),
+                                              "Zip (*.zip)")
+        if not path:
+            return
+        try:
+            n = import_pictures(path, self.ov.images_dir)
+        except (ValueError, OSError) as e:
+            QMessageBox.warning(self, "Pictures", str(e))
+            return
+        QMessageBox.information(self, "Pictures", "%d pictures were added to:\n%s\n\nThe program restarts now so "
+                                "that it can use them." % (n, self.ov.images_dir))
+        from .updater import restart_program
+        restart_program()
+
+    def export_pics(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save my pictures as a zip",
+                                              os.path.join(os.path.expanduser("~"), "my-pictures.zip"), "Zip (*.zip)")
+        if not path:
+            return
+        try:
+            n = export_pictures(self.ov.images_dir, path)
+        except OSError as e:
+            QMessageBox.warning(self, "Pictures", str(e))
+            return
+        QMessageBox.information(self, "Pictures", "%d pictures saved in:\n%s\n\nSend this zip to a friend "
+                                "privately. Do not put it on GitHub: the uma pictures are Cygames' art." % (n, path))
 
     # ---- uma pictures helpers
     def refresh_umas(self):

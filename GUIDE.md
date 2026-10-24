@@ -41,14 +41,20 @@ Black or solid background in OBS? Start the program with `--chroma` (right click
 
 Use *Windowed* or *Borderless windowed* in the game's graphics settings. A true fullscreen game hides windows that stay on top.
 
-## 6. Change what is shown
+## 6. Pictures of umas and players
+
+The release does not contain pictures (the uma art belongs to Cygames). If someone gave you a **pictures zip**:
+Home tab, **More**, **Import pictures from a zip...**, choose the zip. The program restarts and shows them.
+To share your own pictures: **Save my pictures as a zip...** and send the file privately (not on GitHub).
+
+## 7. Change what is shown
 
 Home tab, **Setup**: *Just the tower*, *Tower and results*, *Points for every player*, *Team match (draft)*, *Everything at once*.
 The other tabs change looks, timing and the points or team rules.
 
-## 7. Update
+## 8. Update
 
-Download the new zip, extract it, and copy your **`images`** folder into the new folder. Your settings are kept automatically.
+Download the new zip and extract it. Your settings and pictures are kept automatically (in `%APPDATA%\\race-overlay-native`).
 
 ## Problems?
 

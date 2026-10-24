@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+- **New:** **Import pictures from a zip...** and **Save my pictures as a zip...** (Home tab, *More*). Make a zip of your uma and player pictures and send it to a friend privately; the friend imports it and the program restarts with the pictures. Existing pictures are kept and lists are merged.
+- **Changed:** the pictures now live in `%APPDATA%\\race-overlay-native\\images`, so a new version never loses them and you no longer copy a folder when updating. An `images` folder next to the `.exe` (version 1.0.0) is still used until you import a zip.
+- **Note:** the release itself never contains pictures (uma art belongs to Cygames, player pictures are private).
+
 ## 1.0.0
 
 - **First release of the Windows version.** It is the Linux overlay (version 1.9.6) made into its own project for Windows, built as `UmaRaceOverlay.exe` by GitHub for every release (`race-overlay-windows-X.Y.Z.zip`). The Linux version continues in its own repository.

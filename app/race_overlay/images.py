@@ -166,3 +166,77 @@ class ImageStore(QThread):
 
     def run(self):
         self.exec()
+
+
+# ----- share your pictures as a zip (so a friend does not have to collect them again) -----------------
+
+PACK_JSON = ("images.json", "players.json", "outfits.json", "umas.json")
+MAX_PACK_BYTES = 400 * 1024 * 1024
+
+
+def export_pictures(images_dir, zip_path):
+    """Save players/, uma/ and the picture lists as a zip. Returns the number of pictures."""
+    import zipfile
+    n = 0
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for sub in ("players", "uma"):
+            base = os.path.join(images_dir, sub)
+            if not os.path.isdir(base):
+                continue
+            for name in sorted(os.listdir(base)):
+                if os.path.splitext(name)[1].lower() in IMG_EXTS and os.path.isfile(os.path.join(base, name)):
+                    z.write(os.path.join(base, name), "images/%s/%s" % (sub, name))
+                    n += 1
+        for name in PACK_JSON:
+            p = os.path.join(images_dir, name)
+            if os.path.isfile(p):
+                z.write(p, "images/" + name)
+    return n
+
+
+def _merge_json(old_bytes, new_bytes):
+    try:
+        old = json.loads(old_bytes.decode("utf-8"))
+        new = json.loads(new_bytes.decode("utf-8"))
+        if isinstance(old, dict) and isinstance(new, dict):
+            old.update(new)
+            return json.dumps(old, indent=2, ensure_ascii=False).encode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        pass
+    return new_bytes
+
+
+def import_pictures(zip_path, images_dir):
+    """Copy the pictures of a zip made by export_pictures() (or a zip of an 'images' folder) into images_dir.
+    Only pictures and the picture lists are taken, nothing outside images_dir is ever written.
+    Returns the number of pictures. Raises ValueError for a zip without pictures."""
+    import zipfile
+    n = 0
+    with zipfile.ZipFile(zip_path) as z:
+        if sum(i.file_size for i in z.infolist()) > MAX_PACK_BYTES:
+            raise ValueError("The zip is too big to be a picture pack.")
+        for info in z.infolist():
+            if info.is_dir():
+                continue
+            parts = [p for p in info.filename.replace("\\", "/").split("/") if p not in ("", ".")]
+            if ".." in parts or not parts:
+                continue
+            if parts[0].lower() == "images":
+                parts = parts[1:]
+            if len(parts) == 2 and parts[0] in ("players", "uma") \
+                    and os.path.splitext(parts[1])[1].lower() in IMG_EXTS:
+                dest = os.path.join(images_dir, parts[0], parts[1])
+                n += 1
+            elif len(parts) == 1 and parts[0] in PACK_JSON:
+                dest = os.path.join(images_dir, parts[0])
+            else:
+                continue
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            data = z.read(info)
+            if parts[-1] in PACK_JSON and os.path.isfile(dest):
+                data = _merge_json(read_file(dest), data)
+            with open(dest, "wb") as f:
+                f.write(data)
+    if n == 0:
+        raise ValueError("No pictures found in this zip. Choose a zip made with \"Save my pictures as a zip\".")
+    return n
