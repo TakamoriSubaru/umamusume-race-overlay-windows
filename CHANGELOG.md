@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- **Fixed:** the uma faces are now also found when Race Overlay is in a folder you chose yourself (Home tab, *More*). Before, only the automatic places (Documents, Downloads, Desktop) were searched for its `resources\\character_thumbs` folder, so faces were missing with saved races.
+
 ## 1.0.1
 
 - **New:** **Import pictures from a zip...** and **Save my pictures as a zip...** (Home tab, *More*). Make a zip of your uma and player pictures and send it to a friend privately; the friend imports it and the program restarts with the pictures. Existing pictures are kept and lists are merged.

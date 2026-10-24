@@ -9,12 +9,12 @@ from .constants import IMG_EXTS, IS_WINDOWS
 from .util import http_get
 
 
-def find_wine_thumb_dirs():
+def find_wine_thumb_dirs(preferred=""):
     """Looks for the character_thumbs folder of Race Overlay inside your Wine/Proton prefixes."""
     import glob
     if IS_WINDOWS:                   # Windows: Race Overlay runs natively, look for its folder
         from .diagnostics import find_race_overlay
-        d = find_race_overlay()
+        d = find_race_overlay(preferred)       # the folder chosen in the Home tab wins
         thumbs = os.path.join(d, "resources", "character_thumbs") if d else ""
         return [thumbs] if thumbs and os.path.isdir(thumbs) else []
     pats = [

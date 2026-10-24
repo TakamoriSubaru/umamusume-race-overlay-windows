@@ -150,7 +150,7 @@ class OverlayWidget(FramelessMixin, QWidget):
 
         images_dir = os.path.expanduser(args.images_dir) if args.images_dir else IMAGES_DIR
         extra = [os.path.expanduser(args.thumbs_dir)] if args.thumbs_dir else []
-        extra += find_wine_thumb_dirs()
+        extra += find_wine_thumb_dirs(self.s.get("race_overlay_dir", ""))
         self.thumbs = ImageStore(self.base, images_dir, extra)
         self.images_dir = images_dir
         self.players = PlayersDB(os.path.join(images_dir, "players.json"))
