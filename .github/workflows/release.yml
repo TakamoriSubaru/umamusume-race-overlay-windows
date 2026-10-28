@@ -54,6 +54,24 @@ jobs:
           # packaged program loads all its parts; a hang or an error stops the build here.
           timeout 120 dist/UmaRaceOverlay/UmaRaceOverlay.exe --version
 
+      - name: Get the Race Overlay files (optional, for the "full" zip)
+        # The owner uploads his permitted copy once as the asset Race-Overlay.zip of the (pre)release
+        # "race-overlay-files" (server.zip, or the older name Race-Overlay.zip). Without it only the plain zip is
+        # made. It is put next to the program as the folder "server" and its files are never changed.
+        shell: pwsh
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force ro | Out-Null
+          gh release download race-overlay-files --pattern "*.zip" --dir ro --repo $env:GITHUB_REPOSITORY
+          $zipfile = Get-ChildItem ro -Filter "*.zip" | Select-Object -First 1
+          if ($LASTEXITCODE -ne 0 -or -not $zipfile) { Write-Host "No server files uploaded: only the plain zip is made."; exit 0 }
+          Expand-Archive $zipfile.FullName -DestinationPath ro/x
+          $exe = Get-ChildItem ro/x -Recurse -Filter "Race Overlay.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Host "Race Overlay.exe is not in that zip."; exit 0 }
+          "RO_DIR=$($exe.Directory.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Make the zip, the release notes and latest.json
         shell: pwsh
         run: |
@@ -63,6 +81,17 @@ jobs:
           Copy-Item app/icon.png, README.md, CHANGELOG.md dist/UmaRaceOverlay/
           Rename-Item -Path dist/UmaRaceOverlay -NewName $name
           Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip"
+          # the full zip: the same, with the server folder next to UmaRaceOverlay.exe (found by itself)
+          $full = ""
+          if ($env:RO_DIR -and (Test-Path "$env:RO_DIR/Race Overlay.exe")) {
+            try {
+              Copy-Item -Recurse $env:RO_DIR "dist/$name/server"
+              Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name-full.zip"
+              Remove-Item -Recurse -Force "dist/$name/server"
+              $full = "dist/$name-full.zip"
+            } catch { Write-Host "The full zip could not be made: $_" }
+          }
+          "FULL=$full" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           # release notes = the "## $ver" section of CHANGELOG.md
           $notes = @(); $on = $false
           foreach ($line in Get-Content CHANGELOG.md -Encoding UTF8) {
@@ -83,7 +112,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-zip
-          path: ${{ env.ZIP }}
+          path: |
+            ${{ env.ZIP }}
+            ${{ env.FULL }}
 
       - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -91,5 +122,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "$ZIP" dist/latest.json \
+          gh release create "$GITHUB_REF_NAME" "$ZIP" ${FULL:+"$FULL"} dist/latest.json \
             --title "Version $VER" --notes-file notes.md

@@ -36,7 +36,8 @@ def find_race_overlay(preferred=""):
     `preferred` is the folder chosen in the settings (Windows)."""
     home = os.path.expanduser("~")
     cands = [os.path.expanduser(preferred or ""), os.environ.get("RACE_OVERLAY_DIR", ""),
-             os.path.join(SCRIPT_DIR, "..", "Race Overlay"), os.path.join(SCRIPT_DIR, "Race Overlay"),
+             os.path.join(SCRIPT_DIR, "server"), os.path.join(SCRIPT_DIR, "..", "Race Overlay"),
+             os.path.join(SCRIPT_DIR, "Race Overlay"),
              os.path.join(home, "Documents", "Race Overlay"), os.path.join(home, "Downloads", "Race Overlay"),
              os.path.join(home, "Desktop", "Race Overlay"), os.path.join(home, "Race Overlay")]
     pats = ["~/.local/share/Steam/steamapps/compatdata/*/pfx/drive_c/Race Overlay",

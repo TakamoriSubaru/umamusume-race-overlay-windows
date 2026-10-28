@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5
+
+- **New:** a **full zip** (`race-overlay-windows-X.Y.Z-full.zip`) next to the plain one. It also holds the server files (Race Overlay) in a folder called `server` next to `UmaRaceOverlay.exe`, so the overlay finds the server by itself and nobody has to get anything else. Use the full zip when you have it; the plain zip is the program alone.
+
 ## 1.0.4
 
 - **New:** match board **Race by race** switch (Draft tab, *Board*). Off = the board shows only the two team scores with their progress bars (and the drafted umas if you keep them on). Both switches off gives the smallest board.
