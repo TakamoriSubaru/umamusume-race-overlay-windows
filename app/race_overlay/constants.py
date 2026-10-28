@@ -22,7 +22,7 @@ LUCK_NAME = "Umamusume Skill Luck (%s)" % PLATFORM        # window name of the s
 RESULTS_NAME = "Umamusume Race Results (%s)" % PLATFORM   # window name of the results board (pick it in OBS)
 
 
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 
 
 SLIDE_SECONDS = 0.45       # how long the tower takes to slide in / out
@@ -164,6 +164,7 @@ DEFAULT_SETTINGS = {
     "match_board": True,              # show the match board after the results board
     "match_seconds": 0.0,             # how long the match board stays (0 = until the next race)
     "match_title": "",                # own title for the match board ("" = TEAM MATCH)
+    "match_show_races": True,         # match board: the points of every race (off = only the score)
     "match_show_picks": True,         # match board: the umas each team drafted
     "luck_board": False,              # show the skill luck board (luckiest / unluckiest) after the results board
     "results_title": "",              # own title for the results board ("" = RACE RESULTS)
@@ -189,7 +190,7 @@ KEEP_ON_RESET = ("source", "saved_races_dir", "watch_subfolders", "start_delay",
                  "standings_view", "standings_round_blocks", "standings_total_cols", "standings_border_values",
                  "standings_top_n", "standings_hide_zero", "standings_layout", "standings_avatars", "standings_every",
                  "standings_title", "standings_rows", "standings_page_seconds", "standings_refresh", "quick_start_open", "luck_board",
-                 "luck_seconds", "match_mode", "match_board", "match_seconds", "match_title", "match_show_picks",
+                 "luck_seconds", "match_mode", "match_board", "match_seconds", "match_title", "match_show_races", "match_show_picks",
                  "start_race_overlay", "race_overlay_dir", "race_overlay_start",
                  "results_delay", "luck_when", "luck_delay", "match_when", "match_delay", "standings_when", "standings_delay")
 

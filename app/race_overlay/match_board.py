@@ -33,6 +33,9 @@ class MatchBoard(ResultsBoard):
     def show_picks(self):
         return bool(self.ov.s.get("match_show_picks", True)) and any(t["picks"] for t in self.match.teams)
 
+    def show_races(self):
+        return bool(self.ov.s.get("match_show_races", True))
+
     def rows_shown(self):
         return self.match.race_rows()[-MAX_RACES:]
 
@@ -44,10 +47,10 @@ class MatchBoard(ResultsBoard):
         self.footer = footer or ""
         if self.match is None:
             return
-        n_races = max(1, len(self.rows_shown()))
+        n_races = max(1, len(self.rows_shown())) if self.show_races() else 0
         n_picks = min(MAX_PICKS, max(len(t["picks"]) for t in self.match.teams)) if self.show_picks() else 0
         self.lw = 2 * PAD + 2 * COL_W + GUTTER
-        self.lh = TOP_H + 8 + HEAD_H + SUB_H + n_races * RACE_H + 4
+        self.lh = TOP_H + 8 + HEAD_H + (SUB_H + n_races * RACE_H if self.show_races() else 0) + 4
         if n_picks:
             self.lh += SUB_H + n_picks * PICK_H + 4
         self.lh += FOOT_H + PAD
@@ -86,20 +89,21 @@ class MatchBoard(ResultsBoard):
             self.draw_team(p, m.teams[c], totals[c], x, TOP_H + 8, tc, sc, ac, win == c)
 
         y = TOP_H + 8 + HEAD_H
-        p.setFont(self.spaced(10, True, 1.8))
-        p.setPen(sc)
-        p.drawText(QRectF(PAD + 8, y, 2 * COL_W + GUTTER - 16, SUB_H),
-                   Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, "RACE BY RACE")
-        y += SUB_H
-        rows = self.rows_shown()
-        if not rows:
-            p.setFont(self.ov.fnt(11))
+        if self.show_races():
+            p.setFont(self.spaced(10, True, 1.8))
             p.setPen(sc)
-            p.drawText(QRectF(PAD, y, 2 * COL_W + GUTTER, RACE_H), Qt.AlignmentFlag.AlignCenter,
-                       "No race scored yet")
-        for label, da, db in rows:
-            self.draw_race_row(p, label, da, db, y, tc, sc, m)
-            y += RACE_H
+            p.drawText(QRectF(PAD + 8, y, 2 * COL_W + GUTTER - 16, SUB_H),
+                       Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, "RACE BY RACE")
+            y += SUB_H
+            rows = self.rows_shown()
+            if not rows:
+                p.setFont(self.ov.fnt(11))
+                p.setPen(sc)
+                p.drawText(QRectF(PAD, y, 2 * COL_W + GUTTER, RACE_H), Qt.AlignmentFlag.AlignCenter,
+                           "No race scored yet")
+            for label, da, db in rows:
+                self.draw_race_row(p, label, da, db, y, tc, sc, m)
+                y += RACE_H
         y += 4
         if self.show_picks():
             p.setFont(self.spaced(10, True, 1.8))

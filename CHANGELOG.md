@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.4
+
+- **New:** match board **Race by race** switch (Draft tab, *Board*). Off = the board shows only the two team scores with their progress bars (and the drafted umas if you keep them on). Both switches off gives the smallest board.
+
 ## 1.0.3
 
 - **New:** **Names shown** (Look tab): *Trainer and uma name*, *Trainer name only* or *Uma name only*. It changes the tower (full and small), the results board and the skill luck board. With one name, it is centred in the row.
