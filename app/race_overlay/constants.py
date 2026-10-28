@@ -22,7 +22,7 @@ LUCK_NAME = "Umamusume Skill Luck (%s)" % PLATFORM        # window name of the s
 RESULTS_NAME = "Umamusume Race Results (%s)" % PLATFORM   # window name of the results board (pick it in OBS)
 
 
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 
 
 SLIDE_SECONDS = 0.45       # how long the tower takes to slide in / out
@@ -108,6 +108,7 @@ DEFAULT_SETTINGS = {
     "open_menu": True,         # open the Menu window when the program starts
     "update_url": "https://github.com/TakamoriSubaru/umamusume-race-overlay-windows/releases/latest/download/latest.json",  # "Check online" link
     "default_faces": True,     # use the faces found in Race Overlay when you have not chosen a picture
+    "names": "both",           # what the rows say: "both" = trainer and uma, "trainer" = trainer only, "uma" = uma only
     "pictures": "both",        # "both" = uma image + small player picture, "uma" = uma image only,
                                # "player" = player picture in the big circle (uma image if the player has none)
     "bg": "#090912",

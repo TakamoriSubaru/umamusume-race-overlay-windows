@@ -47,6 +47,22 @@ def clean_lines(value):
     return out
 
 
+def name_keys(name):
+    """Ways to spell a player name that count as the same player: capitals, full-width letters, spaces and
+    punctuation do not matter, and a club tag in front ("CLUB | Name", "[CLUB] Name") may be left out."""
+    k = norm_name(name)
+    keys = set()
+    if not k:
+        return keys
+    for form in {k, k.split("|")[-1].strip(), k.split("]")[-1].strip()}:
+        flat = "".join(c for c in form if c.isalnum())
+        if form:
+            keys.add(form)
+        if flat:
+            keys.add(flat)
+    return keys
+
+
 class Match:
     def __init__(self, path=MATCH_FILE):
         self.path = path
@@ -126,11 +142,11 @@ class Match:
 
     def team_of(self, name):
         """0 or 1 for a player on that team, None for everybody else."""
-        k = norm_name(name)
-        if not k:
+        keys = name_keys(name)
+        if not keys:
             return None
         for i, t in enumerate(self.teams):
-            if any(norm_name(p) == k for p in t["players"]):
+            if any(keys & name_keys(p) for p in t["players"]):
                 return i
         return None
 

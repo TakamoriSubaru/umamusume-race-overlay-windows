@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.3
+
+- **New:** **Names shown** (Look tab): *Trainer and uma name*, *Trainer name only* or *Uma name only*. It changes the tower (full and small), the results board and the skill luck board. With one name, it is centred in the row.
+- **Fixed (team match / draft):** players are now found even when the name is spelled a little differently: capitals, spaces, full-width letters and a club tag in front (`CLUB｜Name`, `[CLUB] Name`) no longer matter. Before, a player typed as `Name` was never found when the game said `CLUB｜Name`, so nothing scored.
+- **New (team match):** the Draft tab now says why the last race did or did not score (*Counted*, *Team match mode is OFF*, *nobody in this race is on a team* with the names it saw, *a saved file that was already there when the program started*, *already scored*).
+- **Fixed (server):** if the Race Overlay folder is not found, the overlay no longer gives up. It keeps looking every few seconds, so you can drop the folder in or choose it in the Home tab without a restart. The search also looks inside folders next to the program, in Documents, Downloads and Desktop (a few levels deep, any folder name), and the Help tab explains that Race Overlay is a separate program that must be there.
+- **Fixed:** the live status text no longer mentions a Linux log file on Windows.
+
 ## 1.0.2
 
 - **Fixed:** the uma faces are now also found when Race Overlay is in a folder you chose yourself (Home tab, *More*). Before, only the automatic places (Documents, Downloads, Desktop) were searched for its `resources\\character_thumbs` folder, so faces were missing with saved races.

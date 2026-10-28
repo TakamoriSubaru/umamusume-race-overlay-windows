@@ -171,6 +171,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.book = ScoreBook()                 # points of every race (scores.json)
         self.standings = StandingsBoard(self)
         self.luck = LuckBoard(self)
+        self.match_note = ""
         self.match = Match()                    # team match (draft): teams, players, races (match.json)
         self.mboard = MatchBoard(self)
         self.skill_acts = {}                    # {horse index: [skill ids that activated]}
@@ -741,6 +742,15 @@ class OverlayWidget(FramelessMixin, QWidget):
         tri.closeSubpath()
         p.fillPath(tri, col)
 
+    def name_parts(self, h):
+        """(headline, small line under it) for a row, following the 'Names' choice in the Look tab."""
+        mode = self.s.get("names", "both")
+        if mode == "trainer" and h.trainer:
+            return h.trainer, ""
+        if mode == "uma" or not h.trainer:
+            return h.label, ""
+        return h.trainer, h.label
+
     def draw_row_compact(self, p, h, lw, y):
         """A small row: place, picture, trainer (and uma) on the left, the gap or finish time on the right."""
         tc, sc = QColor(self.s["text_color"]), QColor(self.s["sub_color"])
@@ -758,20 +768,19 @@ class OverlayWidget(FramelessMixin, QWidget):
         gap_w = 62
         nx = 58
         name_w = int(lw - nx - gap_w - 6)
-        if h.trainer:
-            tf = self.fnt(11.5, True)
-            p.setFont(tf); p.setPen(tc)
+        head, subline = self.name_parts(h)
+        tf = self.fnt(11.5, True)
+        p.setFont(tf); p.setPen(tc)
+        if subline:
             p.drawText(QRectF(nx, y + 3, name_w, 15), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                       QFontMetrics(tf).elidedText(h.trainer, Qt.TextElideMode.ElideRight, name_w))
+                       QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, name_w))
             nf = self.fnt(8.5)
             p.setFont(nf); p.setPen(sc)
             p.drawText(QRectF(nx, y + 18, name_w, 13), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                       QFontMetrics(nf).elidedText(h.label, Qt.TextElideMode.ElideRight, name_w))
-        else:
-            tf = self.fnt(11.5, True)
-            p.setFont(tf); p.setPen(tc)
+                       QFontMetrics(nf).elidedText(subline, Qt.TextElideMode.ElideRight, name_w))
+        else:                                   # one name only: centred in the row
             p.drawText(QRectF(nx, y, name_w, rh), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                       QFontMetrics(tf).elidedText(h.label, Qt.TextElideMode.ElideRight, name_w))
+                       QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, name_w))
         l1 = h.gap_lines[0]
         if h.gap_kind == "lead":
             p.setFont(self.fnt(10.5, True)); p.setPen(QColor("#d4a017"))
@@ -824,21 +833,26 @@ class OverlayWidget(FramelessMixin, QWidget):
         p.drawText(QRectF(nx, y + 9, 14, 14), Qt.AlignmentFlag.AlignCenter, STYLE_LABEL.get(h.style, "?"))
 
         name_w = 100
+        head, subline = self.name_parts(h)
         tf = self.fnt(12, True)
         p.setFont(tf); p.setPen(tc)
-        p.drawText(QRectF(nx + 18, y + 8, name_w, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                   QFontMetrics(tf).elidedText(h.trainer, Qt.TextElideMode.ElideRight, name_w))
-        # uma name: "Meisho Doto", or "Meisho Doto (Halloween)" for an alternative outfit.
-        # A long name is made a little smaller first, and only cut off when it still does not fit.
-        full_w = name_w + 18
-        nf = self.fnt(10)
-        for px in (9.0, 8.0):
-            if QFontMetrics(nf).horizontalAdvance(h.label) <= full_w:
-                break
-            nf = self.fnt(px)
-        p.setFont(nf); p.setPen(sc)
-        p.drawText(QRectF(nx, y + 25, full_w, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                   QFontMetrics(nf).elidedText(h.label, Qt.TextElideMode.ElideRight, full_w))
+        if not subline:                         # one name only: centred in the row, a little wider
+            p.drawText(QRectF(nx + 18, y, name_w + 14, self.rh), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                       QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, name_w + 14))
+        else:
+            p.drawText(QRectF(nx + 18, y + 8, name_w, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                       QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, name_w))
+            # uma name: "Meisho Doto", or "Meisho Doto (Halloween)" for an alternative outfit.
+            # A long name is made a little smaller first, and only cut off when it still does not fit.
+            full_w = name_w + 18
+            nf = self.fnt(10)
+            for px in (9.0, 8.0):
+                if QFontMetrics(nf).horizontalAdvance(subline) <= full_w:
+                    break
+                nf = self.fnt(px)
+            p.setFont(nf); p.setPen(sc)
+            p.drawText(QRectF(nx, y + 25, full_w, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                       QFontMetrics(nf).elidedText(subline, Qt.TextElideMode.ElideRight, full_w))
 
         # gap
         l1, l2 = h.gap_lines
@@ -1313,6 +1327,14 @@ class OverlayWidget(FramelessMixin, QWidget):
         scoring = bool(self.s.get("scoring", True)) and counts and not match_on
         if match_on:
             self.score_match(entries, line1)
+        elif self.match.races or self.s.get("match_mode", False) or any(t["players"] for t in self.match.teams):
+            if not self.s.get("match_mode", False):
+                self.set_match_note("NOT counted: Team match mode is OFF (tick it in the Draft tab).")
+            elif self.preview or testing:
+                self.set_match_note("NOT counted: this was a preview or a test replay.")
+            else:
+                self.set_match_note("NOT counted: this race came from a saved file that was already there when "
+                                    "the program started. Only races that happen after the start count.")
         if scoring:
             named = [e for e in entries if e["h"].trainer.strip()]
             for e in named:
@@ -1368,12 +1390,34 @@ class OverlayWidget(FramelessMixin, QWidget):
             if due and at is not None:
                 self.standings.present(delay=at)
 
+    def set_match_note(self, text):
+        """Why the last race did or did not score, shown in the Draft tab."""
+        self.match_note = "%s  %s" % (time.strftime("%H:%M"), text)
+        logbuf.add("match: " + text)
+        if getattr(self, "dialog", None) is not None:
+            try:
+                self.dialog.update_match_label()
+            except Exception:
+                pass
+
     def score_match(self, entries, title):
         """Give the race to the teams: the best placed team players score (4, 2, 1 ...). Players that are on
         no team (NPCs, other players) are skipped, so the next team player takes the placement."""
         named = [{"name": e["h"].trainer, "uma": e["h"].label, "place": e["place"], "time": e["time"]}
                  for e in entries if e["h"].trainer.strip()]
         race = self.match.add_race(named, title=title)
+        if race:
+            ta, tb = race["delta"]
+            self.set_match_note("Counted: %s +%d, %s +%d." % (self.match.teams[0]["name"], ta,
+                                                             self.match.teams[1]["name"], tb))
+        elif not self.match.ready():
+            self.set_match_note("NOT counted: add at least one player to each team (Draft tab).")
+        elif not any(self.match.team_of(n["name"]) is not None for n in named):
+            self.set_match_note("NOT counted: nobody in this race is on a team. Names in the race: %s. "
+                                "Check how the players are spelled in the Draft tab."
+                                % ", ".join(n["name"] for n in named[:12]))
+        else:
+            self.set_match_note("NOT counted again: this race was already scored.")
         scored = {}
         if race:
             scored = {norm_name(r["name"]): r for r in race["results"]}

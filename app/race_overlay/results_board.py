@@ -292,13 +292,13 @@ class ResultsBoard(FramelessMixin, QWidget):
         time_w = 92
         pw = PTS_W if "pts" in ent else 0
         name_w = self.col_w - 82 - time_w - 4 - pw
-        trainer, label = h.trainer, h.label
-        if trainer:
-            tf = ov.fnt(13, True)
-            p.setFont(tf)
-            p.setPen(tc)
+        head, label = ov.name_parts(h)
+        tf = ov.fnt(13, True)
+        p.setFont(tf)
+        p.setPen(tc)
+        if label:
             p.drawText(QRectF(name_x, y + 5, name_w, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                       QFontMetrics(tf).elidedText(trainer, Qt.TextElideMode.ElideRight, int(name_w)))
+                       QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, int(name_w)))
             nf = ov.fnt(10)
             for px in (9.0, 8.0):
                 if QFontMetrics(nf).horizontalAdvance(label) <= name_w:
@@ -308,12 +308,9 @@ class ResultsBoard(FramelessMixin, QWidget):
             p.setPen(sc)
             p.drawText(QRectF(name_x, y + 23, name_w, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                        QFontMetrics(nf).elidedText(label, Qt.TextElideMode.ElideRight, int(name_w)))
-        else:                                     # no trainer name: the uma name is the headline
-            tf = ov.fnt(13, True)
-            p.setFont(tf)
-            p.setPen(tc)
+        else:                                     # one name only: it is the headline
             p.drawText(QRectF(name_x, y, name_w, rh), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                       QFontMetrics(tf).elidedText(label, Qt.TextElideMode.ElideRight, int(name_w)))
+                       QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, int(name_w)))
 
         # time + gap to the winner
         tx = x + self.col_w - time_w - 8 - pw

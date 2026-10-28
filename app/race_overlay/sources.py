@@ -7,7 +7,7 @@ import time
 import urllib.request
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from .constants import TRACK_NAMES
+from .constants import IS_WINDOWS, TRACK_NAMES
 from .luck import skill_ids
 from .simdata import parse_sim
 from .util import _safe_listdir, http_get, process_running
@@ -84,8 +84,12 @@ class SseThread(QThread):
                                 d = d[1:]
                             buf.append(d)
             except Exception:
-                self.status.emit("Race Overlay server not reachable yet.\nIs Race Overlay running?\n"
-                                 "(see /tmp/race-overlay-wine.log)")
+                if IS_WINDOWS:
+                    self.status.emit("Race Overlay server not reachable yet.\nIs the Race Overlay folder found?\n"
+                                     "(Help tab shows why)")
+                else:
+                    self.status.emit("Race Overlay server not reachable yet.\nIs Race Overlay running?\n"
+                                     "(see /tmp/race-overlay-wine.log)")
             for _ in range(20):
                 if self._stop:
                     return

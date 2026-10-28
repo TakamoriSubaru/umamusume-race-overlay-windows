@@ -33,7 +33,7 @@ Windows may say *Windows protected your PC* because the program is not signed. C
 
 A **welcome guide** asks what you want to show: *Just the tower*, *Tower and results*, *Points for every player*, *Team match (draft)* or *Everything at once*, and the tower size (full or small corner). It switches the right boards on and lists what to do next. You can change it any time in the **Home tab, Setup**. Colours, fonts, window position and folders are never changed by a setup.
 
-1. Put the original **Race Overlay** folder (the one with `Race Overlay.exe`) in your Documents, Downloads or Desktop folder. The overlay finds it, starts its server once Uma Musume is running (and again until the server has found the game), and closes it when you quit. Somewhere else? Choose the folder in **Home tab, More**.
+1. Put the original **Race Overlay** folder (the one with `Race Overlay.exe`) in your Documents, Downloads or Desktop folder. The overlay finds it, starts its server once Uma Musume is running (and again until the server has found the game), and closes it when you quit. Somewhere else? Choose the folder in **Home tab, More**. If it is missing, the overlay keeps looking and the **Help tab** says so.
 2. Start Uma Musume. The dot in the Home tab turns green when everything is ready. For saved races instead of live data, choose the folder in the **Race data** tab.
 3. Press **Show preview race** to see the tower with made-up umas.
 

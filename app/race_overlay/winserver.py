@@ -17,6 +17,7 @@ from . import logbuf
 SERVER_LOG = os.path.join(TMP_DIR, "race-overlay-server.log")
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
+LAST = {"text": ""}  # the last thing the starter said (shown in the Help tab)
 _STARTED = []        # the processes this program started (and closes again when it quits)
 
 
@@ -58,6 +59,7 @@ class ServerStarter(threading.Thread):
         self.proc = None
 
     def say(self, text):
+        LAST["text"] = text
         logbuf.add("Race Overlay: " + text)
 
     def stop(self):
@@ -72,10 +74,19 @@ class ServerStarter(threading.Thread):
         try:
             if not self.get("start_race_overlay", True):
                 return
-            folder = find_race_overlay(self.get("race_overlay_dir", ""))
-            if not folder:
-                self.say("not found. Choose its folder in the Home tab (More), or use saved races.")
-                return
+            folder, warned = None, False
+            while not folder:                       # keeps looking: drop the folder in, or choose it, no restart
+                folder = find_race_overlay(self.get("race_overlay_dir", ""))
+                if folder:
+                    break
+                if not warned:
+                    self.say("the Race Overlay folder was NOT found. It is a separate program (not inside this "
+                             "one): put its folder, with 'Race Overlay.exe' and 'resources', next to "
+                             "UmaRaceOverlay.exe or choose it in the Home tab (More). Looking again every few "
+                             "seconds.")
+                    warned = True
+                if self.wait(5.0):
+                    return
             mode = self.get("race_overlay_start", "server") or "server"
             self.say("found in %s, waiting for Uma Musume ..." % folder)
             while not process_running(self.game_match):

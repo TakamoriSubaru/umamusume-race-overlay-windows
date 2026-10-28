@@ -64,15 +64,16 @@ class LuckBoard(ResultsBoard):
         tf = ov.fnt(13, True)
         p.setFont(tf)
         p.setPen(tc)
-        head = h.trainer or h.label
-        p.drawText(QRectF(name_x, y + 5, name_w, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        head, sub = ov.name_parts(h)
+        p.drawText(QRectF(name_x, y + (5 if sub else 11), name_w, 18),
+                   Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                    QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, int(name_w)))
-        nf = ov.fnt(10)
-        p.setFont(nf)
-        p.setPen(sc)
-        sub = h.label if h.trainer else ""
-        p.drawText(QRectF(name_x, y + 23, name_w, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                   QFontMetrics(nf).elidedText(sub, Qt.TextElideMode.ElideRight, int(name_w)))
+        if sub:
+            nf = ov.fnt(10)
+            p.setFont(nf)
+            p.setPen(sc)
+            p.drawText(QRectF(name_x, y + 23, name_w, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                       QFontMetrics(nf).elidedText(sub, Qt.TextElideMode.ElideRight, int(name_w)))
 
         total = ent["total"]
         p.setFont(ov.fnt(17, True, mono=True))

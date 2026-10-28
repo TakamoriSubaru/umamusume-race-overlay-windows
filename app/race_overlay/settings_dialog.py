@@ -465,6 +465,16 @@ class SettingsDialog(QDialog):
         self.cb_title.setToolTip("Off = clean window: drag to move it, pull the edges to resize it.")
         ft.addRow("Title bar", self.cb_title)
 
+        self.cmb_names = QComboBox()                      # what the rows say
+        self._name_modes = [("both", "Trainer and uma name"), ("trainer", "Trainer name only"),
+                            ("uma", "Uma name only")]
+        self.cmb_names.addItems([t for _, t in self._name_modes])
+        self.cmb_names.setCurrentIndex(next((i for i, (m, _t) in enumerate(self._name_modes)
+                                             if m == s.get("names", "both")), 0))
+        self.cmb_names.activated.connect(lambda i: ov.set_setting("names", self._name_modes[i][0]))
+        self.cmb_names.setToolTip("Used in the tower, the results board and the skill luck board.")
+        ft.addRow("Names shown", self.cmb_names)
+
         self.cmb_avatar = QComboBox()
         self._pic_modes = [m for m, _ in ov.PICTURE_CHOICES]
         self.cmb_avatar.addItems([t for _, t in ov.PICTURE_CHOICES])
@@ -1240,6 +1250,11 @@ class SettingsDialog(QDialog):
                                     for lab, da, db in rows) if rows else "No race scored yet.")
         if not m.ready():
             text += "<br><i>Add at least one player to each team, or nobody will score.</i>"
+        if not self.ov.s.get("match_mode", False):
+            text += "<br><b>Team match mode is OFF: no race is scored. Tick it above.</b>"
+        note = getattr(self.ov, "match_note", "")
+        if note:
+            text += "<br>Last race: " + note
         self.lbl_match.setText(text)
 
     def match_undo(self):

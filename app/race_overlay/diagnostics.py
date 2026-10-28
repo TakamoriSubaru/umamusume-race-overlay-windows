@@ -54,7 +54,44 @@ def find_race_overlay(preferred=""):
     for d in cands:
         if d and os.path.isfile(os.path.join(d, "Race Overlay.exe")):
             return os.path.realpath(d)
+    if IS_WINDOWS:
+        return _search_folders(home)
     return None
+
+
+_SEARCH = {"at": -100.0, "found": None}
+
+
+def _search_folders(home):
+    """Any folder (a few levels deep) next to the program, in Documents, Downloads or on the Desktop that
+    holds Race Overlay.exe, whatever the folder is called ('Race Overlay 1.4', 'race-overlay-win' ...).
+    The result is remembered for a while, so asking again and again stays cheap."""
+    now = time.monotonic()
+    if now - _SEARCH["at"] < 20.0:
+        f = _SEARCH["found"]
+        return f if f and os.path.isfile(os.path.join(f, "Race Overlay.exe")) else None
+    roots = [SCRIPT_DIR, os.path.dirname(SCRIPT_DIR)]
+    for sub in ("Documents", "Downloads", "Desktop", "OneDrive/Documents", "OneDrive/Desktop"):
+        roots.append(os.path.join(home, sub))
+    seen, found = set(), None
+    for root in roots:
+        root = os.path.realpath(root)
+        if root in seen or not os.path.isdir(root):
+            continue
+        seen.add(root)
+        budget = 2500                                  # folders looked at per place
+        base = root.rstrip("\\/").count(os.sep)
+        for cur, dirs, files in os.walk(root):
+            budget -= 1
+            if "Race Overlay.exe" in files:
+                found = cur
+                break
+            if budget <= 0 or cur.count(os.sep) - base >= 3:
+                dirs[:] = []
+        if found:
+            break
+    _SEARCH["at"], _SEARCH["found"] = now, found
+    return os.path.realpath(found) if found else None
 
 
 _COUNT_CACHE = {}
@@ -95,7 +132,10 @@ def run_checks(ov):
         found = find_race_overlay(ov.s.get("race_overlay_dir", ""))
         out.append(("ok" if found else "warn",
                     "Race Overlay folder found: %s" % found if found else "Race Overlay folder not found",
-                    "" if found else (("Choose the folder with 'Race Overlay.exe' in the Home tab (More)."
+                    "" if found else (("Race Overlay is a separate program and is NOT inside this one. Put its folder "
+                                        "(the one with 'Race Overlay.exe' and 'resources') next to "
+                                        "UmaRaceOverlay.exe, or choose it in the Home tab (More). "
+                                        "The server then starts by itself, no restart needed."
                                        if IS_WINDOWS else
                                        "Put the folder with 'Race Overlay.exe' next to the app folder "
                                        "or set RACE_OVERLAY_DIR in settings.sh."))))
@@ -110,6 +150,10 @@ def run_checks(ov):
                         "Choose it in the Race data tab."))
     else:
         out.append(("info", "Source: %s" % kind, ""))
+        if IS_WINDOWS:
+            from .winserver import LAST
+            if LAST["text"]:
+                out.append(("info", "Race Overlay starter: " + LAST["text"], ""))
 
     if ov.horses:
         out.append(("ok", "A race is loaded (%d umas)" % len(ov.horses), ""))
