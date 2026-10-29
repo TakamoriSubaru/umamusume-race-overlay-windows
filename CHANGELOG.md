@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.7
+
+- **Changed:** the server files are now **built in**. There is one download, `race-overlay-windows-X.Y.Z.zip`, and the `server` folder (Race Overlay) is already inside next to `UmaRaceOverlay.exe`. Unzip, start the program, start the game. The separate `-full` zip is gone.
+
 ## 1.0.6
 
 - **Fixed:** in the small tower, when only one name is shown (Names shown: trainer only or uma only) the running style badge (F / P / L / E) is now centred in the row, level with the name. Before it sat higher than the name.
