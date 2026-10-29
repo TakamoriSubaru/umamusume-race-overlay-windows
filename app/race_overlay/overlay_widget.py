@@ -824,16 +824,18 @@ class OverlayWidget(FramelessMixin, QWidget):
         p.setPen(QColor("#794016") if gi in WAKU_DARK else QColor("#ffffff"))
         p.drawText(QRectF(gx, gy, gs, gs), Qt.AlignmentFlag.AlignCenter, str(h.id))
 
-        # style badge + trainer + uma name
+        # style badge + trainer + uma name. With two lines the badge sits level with the first line;
+        # with one name only (and the name centred in the row) the badge is centred in the row too.
         nx = 91
-        bp = QPainterPath(); bp.addRoundedRect(QRectF(nx, y + 9, 14, 14), 3, 3)
+        head, subline = self.name_parts(h)
+        by = y + 9 if subline else y + (self.rh - 14) / 2.0
+        bp = QPainterPath(); bp.addRoundedRect(QRectF(nx, by, 14, 14), 3, 3)
         p.fillPath(bp, QColor(STYLE_COLOR.get(h.style, "#383858")))
         bf = QFont(); bf.setPixelSize(10); bf.setBold(True)
         p.setFont(bf); p.setPen(QColor("#1a1a28"))
-        p.drawText(QRectF(nx, y + 9, 14, 14), Qt.AlignmentFlag.AlignCenter, STYLE_LABEL.get(h.style, "?"))
+        p.drawText(QRectF(nx, by, 14, 14), Qt.AlignmentFlag.AlignCenter, STYLE_LABEL.get(h.style, "?"))
 
         name_w = 100
-        head, subline = self.name_parts(h)
         tf = self.fnt(12, True)
         p.setFont(tf); p.setPen(tc)
         if not subline:                         # one name only: centred in the row, a little wider

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.6
+
+- **Fixed:** in the small tower, when only one name is shown (Names shown: trainer only or uma only) the running style badge (F / P / L / E) is now centred in the row, level with the name. Before it sat higher than the name.
+
 ## 1.0.5
 
 - **New:** a **full zip** (`race-overlay-windows-X.Y.Z-full.zip`) next to the plain one. It also holds the server files (Race Overlay) in a folder called `server` next to `UmaRaceOverlay.exe`, so the overlay finds the server by itself and nobody has to get anything else. Use the full zip when you have it; the plain zip is the program alone.
