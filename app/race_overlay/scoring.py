@@ -27,6 +27,18 @@ def norm_name(name):
     return unicodedata.normalize("NFKC", str(name or "")).strip().casefold()
 
 
+def strip_club_tag(name):
+    """'CLUB｜Name' and '[CLUB] Name' become 'Name' (the name is kept when nothing would be left)."""
+    s = str(name or "")
+    for sep in ("｜", "|"):
+        if sep in s:
+            s = s.split(sep)[-1]
+    if s.lstrip().startswith("[") and "]" in s:
+        s = s.split("]", 1)[-1]
+    s = s.strip()
+    return s or str(name or "").strip()
+
+
 def rank_rows(rows):
     """rows: dicts with 'score'. Sorts best first and numbers them 1, 2, 3 ... (equal points keep the
     order they came in, so the numbers never repeat)."""

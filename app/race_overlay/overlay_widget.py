@@ -12,6 +12,7 @@ from .config import save_config
 from .constants import (
     APP_NAME,
     ARROW_AFTER,
+    CLOCK_HEADER_H,
     ARROW_SECONDS,
     BASE_W,
     COMPACT_HEADER_H,
@@ -39,7 +40,7 @@ from .frameless import FramelessMixin, fit_window
 from .images import ImageStore, find_file_ci, find_wine_thumb_dirs
 from .results_board import ResultsBoard
 from .setups import get_setup
-from .scoring import ScoreBook, norm_name, points_for
+from .scoring import ScoreBook, norm_name, points_for, strip_club_tag
 from .settings_dialog import SettingsDialog
 from .simdata import parse_sim
 from .sources import TestReplayThread, WatchThread, choose_source
@@ -74,6 +75,7 @@ class Horse:
         self.rank = 0
         self.gap_lines = ("", "")
         self.gap_kind = "none"
+        self.hidden = False         # not shown in the tower ('Players only')
         self.prev_rank = None       # place on the previous frame (for the up / down arrow)
         self.move_dir = 0           # +1 gained a place, -1 lost one
         self.move_at = 0.0
@@ -190,6 +192,11 @@ class OverlayWidget(FramelessMixin, QWidget):
 
     @property
     def hh(self):
+        mode = self.s.get("tower_header", "both")
+        if mode == "none":
+            return 0
+        if mode == "clock":
+            return CLOCK_HEADER_H
         return COMPACT_HEADER_H if self.compact() else HEADER_H
 
     @property
@@ -339,8 +346,15 @@ class OverlayWidget(FramelessMixin, QWidget):
         return horses
 
     # ----- auto size: the window follows the number of umas ----------------------------
+    def update_hidden(self):
+        """'Players only': umas without a trainer name are left out of the tower (when anybody has a name)."""
+        only = bool(self.s.get("players_only", False)) and any(h.trainer.strip() for h in self.horses)
+        for h in self.horses:
+            h.hidden = only and not h.trainer.strip()
+
     def visible_rows(self):
-        n = len(self.horses)
+        self.update_hidden()
+        n = sum(1 for h in self.horses if not h.hidden)
         if self.compact():
             return min(n, max(2, int(self.s.get("compact_rows", 5) or 5)))
         m = int(self.s.get("max_rows", 0) or 0)
@@ -458,7 +472,10 @@ class OverlayWidget(FramelessMixin, QWidget):
             return
         total = (self.course_shape or {}).get("distance") or (self.course_data or {}).get("distance") or 0
         entries = []
+        self.update_hidden()
         for h in self.horses:
+            if h.hidden:
+                continue
             d, ln = frame[h.frame_idx] if h.frame_idx < len(frame) else (0.0, 0)
             res = self.results[h.frame_idx] if h.frame_idx < len(self.results) else None
             fin = bool(res and res["finishTimeRaw"] > 0 and res["finishTimeRaw"] <= t)
@@ -663,7 +680,21 @@ class OverlayWidget(FramelessMixin, QWidget):
         p.setPen(QPen(QColor(255, 255, 255, 30), 1))
         p.drawLine(QPointF(0, self.hh - 1), QPointF(lw, self.hh - 1))
 
+    def draw_header_clock(self, p, lw):
+        """The header with only the race clock (Tower tab, Header)."""
+        tc = QColor(self.s["text_color"])
+        p.setFont(self.fnt(15 if self.compact() else 20, True, mono=True)); p.setPen(tc)
+        p.drawText(QRectF(8, 0, lw - 16, self.hh), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                   self.clock_text)
+        p.setPen(QPen(QColor(255, 255, 255, 30), 1))
+        p.drawLine(QPointF(0, self.hh - 1), QPointF(lw, self.hh - 1))
+
     def draw_header(self, p, lw):
+        mode = self.s.get("tower_header", "both")
+        if mode == "none":
+            return
+        if mode == "clock":
+            return self.draw_header_clock(p, lw)
         if self.compact():
             return self.draw_header_compact(p, lw)
         tc, sc = QColor(self.s["text_color"]), QColor(self.s["sub_color"])
@@ -745,11 +776,32 @@ class OverlayWidget(FramelessMixin, QWidget):
     def name_parts(self, h):
         """(headline, small line under it) for a row, following the 'Names' choice in the Look tab."""
         mode = self.s.get("names", "both")
-        if mode == "trainer" and h.trainer:
-            return h.trainer, ""
-        if mode == "uma" or not h.trainer:
+        trainer = strip_club_tag(h.trainer) if self.s.get("strip_tags", False) else h.trainer
+        if mode == "trainer" and trainer:
+            return trainer, ""
+        if mode == "uma" or not trainer:
             return h.label, ""
-        return h.trainer, h.label
+        return trainer, h.label
+
+    def gap_pair(self, h):
+        """The two gap texts of a row, following 'Gap' in the Tower tab."""
+        l1, l2 = h.gap_lines
+        mode = self.s.get("row_gap", "both")
+        if mode == "none":
+            return ("", "") if h.gap_kind in ("lead", "box") else (l1, l2)
+        if h.gap_kind != "box" or mode == "both":
+            return l1, l2
+        if mode == "time":
+            return l1, ""
+        return (l2.split()[-1] if l2 else ""), ""            # "length": the metres only
+
+    def draw_team_stripe(self, p, h, y):
+        """A thin stripe in the team colour for the players of a draft team."""
+        if not (self.s.get("tower_team_color", True) and self.s.get("match_mode", False)):
+            return
+        t = self.match.team_of(h.trainer)
+        if t is not None:
+            p.fillRect(QRectF(0, y + 5, 3, self.rh - 10), QColor(self.match.teams[t]["color"]))
 
     def draw_row_compact(self, p, h, lw, y):
         """A small row: place, picture, trainer (and uma) on the left, the gap or finish time on the right."""
@@ -759,6 +811,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             c = QColor(PODIUM[h.rank]); c.setAlpha(110)
             p.setPen(QPen(c, 1))
             p.drawLine(QPointF(0, y + rh - 1), QPointF(lw, y + rh - 1))
+        self.draw_team_stripe(p, h, y)
         p.setFont(self.fnt(15, True))
         p.setPen(QColor(PODIUM[h.rank]) if h.rank < 3 else tc)
         p.drawText(QRectF(2, y, 24, rh), Qt.AlignmentFlag.AlignCenter, str(h.rank + 1))
@@ -781,7 +834,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         else:                                   # one name only: centred in the row
             p.drawText(QRectF(nx, y, name_w, rh), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                        QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, name_w))
-        l1 = h.gap_lines[0]
+        l1 = self.gap_pair(h)[0]
         if h.gap_kind == "lead":
             p.setFont(self.fnt(10.5, True)); p.setPen(QColor("#d4a017"))
         elif h.gap_kind == "done":
@@ -792,6 +845,8 @@ class OverlayWidget(FramelessMixin, QWidget):
 
     def draw_row(self, p, h, lw, rows=None):
         tc, sc = QColor(self.s["text_color"]), QColor(self.s["sub_color"])
+        if h.hidden:
+            return
         y = self.hh + (h.y if h.y is not None else h.target)
         limit = self.hh + (rows if rows is not None else len(self.horses)) * self.rh
         if y >= limit or y > self.height() / (self.width() / self.bw) + self.rh:
@@ -804,6 +859,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             p.setPen(QPen(c, 1))
             p.drawLine(QPointF(0, y + self.rh - 1), QPointF(lw, y + self.rh - 1))
 
+        self.draw_team_stripe(p, h, y)
         # rank
         p.setFont(self.fnt(17, True))
         p.setPen(QColor(PODIUM[h.rank]) if h.rank < 3 else tc)
@@ -814,50 +870,54 @@ class OverlayWidget(FramelessMixin, QWidget):
         ax, ay, asz = 30, y + 7, 34
         self.draw_pictures(p, h, QRectF(ax, ay, asz, asz), tc)
 
-        # gate badge
-        gi = max(0, min(7, (h.gate or 1) - 1))
-        gx, gy, gs = 69, y + 16, 16
-        gp = QPainterPath(); gp.addRoundedRect(QRectF(gx, gy, gs, gs), 4, 4)
-        p.fillPath(gp, QColor(WAKU_COLORS[gi]))
-        gf = QFont(); gf.setPixelSize(9 if h.id >= 10 else 10); gf.setBold(True)
-        p.setFont(gf)
-        p.setPen(QColor("#794016") if gi in WAKU_DARK else QColor("#ffffff"))
-        p.drawText(QRectF(gx, gy, gs, gs), Qt.AlignmentFlag.AlignCenter, str(h.id))
-
-        # style badge + trainer + uma name. With two lines the badge sits level with the first line;
-        # with one name only (and the name centred in the row) the badge is centred in the row too.
-        nx = 91
+        # gate badge, style badge, then the names (the badges can be switched off in the Tower tab)
+        x = 69
+        if self.s.get("row_gate", True):
+            gi = max(0, min(7, (h.gate or 1) - 1))
+            gx, gy, gs = x, y + 16, 16
+            gp = QPainterPath(); gp.addRoundedRect(QRectF(gx, gy, gs, gs), 4, 4)
+            p.fillPath(gp, QColor(WAKU_COLORS[gi]))
+            gf = QFont(); gf.setPixelSize(9 if h.id >= 10 else 10); gf.setBold(True)
+            p.setFont(gf)
+            p.setPen(QColor("#794016") if gi in WAKU_DARK else QColor("#ffffff"))
+            p.drawText(QRectF(gx, gy, gs, gs), Qt.AlignmentFlag.AlignCenter, str(h.id))
+            x += 22
+        sub_x = x
         head, subline = self.name_parts(h)
-        by = y + 9 if subline else y + (self.rh - 14) / 2.0
-        bp = QPainterPath(); bp.addRoundedRect(QRectF(nx, by, 14, 14), 3, 3)
-        p.fillPath(bp, QColor(STYLE_COLOR.get(h.style, "#383858")))
-        bf = QFont(); bf.setPixelSize(10); bf.setBold(True)
-        p.setFont(bf); p.setPen(QColor("#1a1a28"))
-        p.drawText(QRectF(nx, by, 14, 14), Qt.AlignmentFlag.AlignCenter, STYLE_LABEL.get(h.style, "?"))
-
-        name_w = 100
+        if self.s.get("row_style", True):
+            # With two lines the badge sits level with the first line; with one name only (centred in the
+            # row) the badge is centred in the row too.
+            by = y + 9 if subline else y + (self.rh - 14) / 2.0
+            bp = QPainterPath(); bp.addRoundedRect(QRectF(x, by, 14, 14), 3, 3)
+            p.fillPath(bp, QColor(STYLE_COLOR.get(h.style, "#383858")))
+            bf = QFont(); bf.setPixelSize(10); bf.setBold(True)
+            p.setFont(bf); p.setPen(QColor("#1a1a28"))
+            p.drawText(QRectF(x, by, 14, 14), Qt.AlignmentFlag.AlignCenter, STYLE_LABEL.get(h.style, "?"))
+            x += 18
+        name_x = x
+        name_w = 100 + (109 - name_x) + (70 if self.s.get("row_gap", "both") == "none" else 0)
         tf = self.fnt(12, True)
         p.setFont(tf); p.setPen(tc)
         if not subline:                         # one name only: centred in the row, a little wider
-            p.drawText(QRectF(nx + 18, y, name_w + 14, self.rh), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            p.drawText(QRectF(name_x, y, name_w + 14, self.rh), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                        QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, name_w + 14))
         else:
-            p.drawText(QRectF(nx + 18, y + 8, name_w, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            p.drawText(QRectF(name_x, y + 8, name_w, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                        QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, name_w))
             # uma name: "Meisho Doto", or "Meisho Doto (Halloween)" for an alternative outfit.
             # A long name is made a little smaller first, and only cut off when it still does not fit.
-            full_w = name_w + 18
+            full_w = name_w + (name_x - sub_x)
             nf = self.fnt(10)
             for px in (9.0, 8.0):
                 if QFontMetrics(nf).horizontalAdvance(subline) <= full_w:
                     break
                 nf = self.fnt(px)
             p.setFont(nf); p.setPen(sc)
-            p.drawText(QRectF(nx, y + 25, full_w, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            p.drawText(QRectF(sub_x, y + 25, full_w, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                        QFontMetrics(nf).elidedText(subline, Qt.TextElideMode.ElideRight, full_w))
 
         # gap
-        l1, l2 = h.gap_lines
+        l1, l2 = self.gap_pair(h)
         if h.gap_kind == "lead":
             p.setFont(self.fnt(11, True)); p.setPen(QColor("#d4a017"))
             p.drawText(QRectF(lw - 92, y, 86, self.rh), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, l1)
@@ -866,9 +926,12 @@ class OverlayWidget(FramelessMixin, QWidget):
             p.drawText(QRectF(lw - 92, y, 86, self.rh), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, l1)
         elif h.gap_kind == "box":
             p.setFont(self.fnt(11, True)); p.setPen(tc)
-            p.drawText(QRectF(lw - 120, y + 8, 114, 16), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, l1)
-            p.setFont(self.fnt(10)); p.setPen(sc)
-            p.drawText(QRectF(lw - 120, y + 25, 114, 14), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, l2)
+            if l1 and l2:
+                p.drawText(QRectF(lw - 120, y + 8, 114, 16), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, l1)
+                p.setFont(self.fnt(10)); p.setPen(sc)
+                p.drawText(QRectF(lw - 120, y + 25, 114, 14), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, l2)
+            elif l1:                            # one gap only: centred in the row
+                p.drawText(QRectF(lw - 120, y, 114, self.rh), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, l1)
 
     # ----- tray icon, show/hide, quit ------------------------------------------
     def set_overlay_visible(self, on):
@@ -1093,7 +1156,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             self.fit_to_rows()
             if key == "tower_style":
                 self.refit_rows_now()
-        if key == "max_rows":
+        if key in ("max_rows", "tower_header", "players_only"):
             self.fit_to_rows()
         if key == "start_delay" and getattr(self, "source", None) is not None:
             self.source.delay = float(value)

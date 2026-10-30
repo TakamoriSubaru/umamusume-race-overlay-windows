@@ -142,13 +142,23 @@ class Match:
 
     def team_of(self, name):
         """0 or 1 for a player on that team, None for everybody else."""
+        sig = tuple(tuple(t["players"]) for t in self.teams)
+        cache = getattr(self, "_tcache", None)
+        if cache is None or cache[0] != sig:             # the teams changed: forget what we knew
+            cache = self._tcache = (sig, {})
+        if name in cache[1]:
+            return cache[1][name]
         keys = name_keys(name)
-        if not keys:
-            return None
-        for i, t in enumerate(self.teams):
-            if any(keys & name_keys(p) for p in t["players"]):
-                return i
-        return None
+        found = None
+        if keys:
+            for i, t in enumerate(self.teams):
+                if any(keys & name_keys(p) for p in t["players"]):
+                    found = i
+                    break
+        if len(cache[1]) > 200:
+            cache[1].clear()
+        cache[1][name] = found
+        return found
 
     def ready(self):
         """True when both teams have at least one player."""

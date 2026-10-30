@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.8
+
+- **New (Tower tab, *What the tower shows*):**
+  - **Header:** track info and clock, clock only, or no header.
+  - **Gap:** seconds and length, seconds only, length only, or no gap.
+  - **Gate number** and **Running style (F / P / L / E)** can each be switched off (full tower). The names use the room that frees up.
+  - **Players only:** umas without a trainer name (NPCs) are left out of the tower, and the window gets shorter.
+  - **Club tags:** `CLUB｜Name` shows as `Name` in the tower, the results board and the skill luck board.
+  - **Team colour:** with Team match mode on, the players of a draft team get a thin stripe in their team colour (full and small tower).
+- **Note:** everything is as before until you change it.
+
 ## 1.0.7
 
 - **Changed:** the server files are now **built in**. There is one download, `race-overlay-windows-X.Y.Z.zip`, and the `server` folder (Race Overlay) is already inside next to `UmaRaceOverlay.exe`. Unzip, start the program, start the game. The separate `-full` zip is gone.

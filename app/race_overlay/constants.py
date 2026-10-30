@@ -43,6 +43,7 @@ FOOT_PAD = 8
 COMPACT_W = 250
 COMPACT_ROW_H = 34
 COMPACT_HEADER_H = 36
+CLOCK_HEADER_H = 34          # the header when only the clock is shown
 
 
 STYLE_COLOR = {1: "#5ca1e5", 2: "#a6db24", 3: "#ffdf31", 4: "#ffb538"}
@@ -108,6 +109,13 @@ DEFAULT_SETTINGS = {
     "open_menu": True,         # open the Menu window when the program starts
     "update_url": "https://github.com/TakamoriSubaru/umamusume-race-overlay-windows/releases/latest/download/latest.json",  # "Check online" link
     "default_faces": True,     # use the faces found in Race Overlay when you have not chosen a picture
+    "row_gate": True,          # tower row: the gate number badge (full tower)
+    "row_style": True,         # tower row: the running style badge F / P / L / E (full tower)
+    "row_gap": "both",         # tower row: "both" (seconds and length), "time", "length" or "none"
+    "tower_header": "both",    # "both" = track info and clock, "clock" = clock only, "none"
+    "players_only": False,     # tower: hide umas that have no trainer name (NPCs)
+    "strip_tags": False,       # names: "CLUB｜Name" shows as "Name"
+    "tower_team_color": True,  # tower: a team colour stripe for the players of a draft team
     "names": "both",           # what the rows say: "both" = trainer and uma, "trainer" = trainer only, "uma" = uma only
     "pictures": "both",        # "both" = uma image + small player picture, "uma" = uma image only,
                                # "player" = player picture in the big circle (uma image if the player has none)

@@ -582,6 +582,45 @@ class SettingsDialog(QDialog):
         self.cmb_corner.setToolTip("Moves the overlay window to that corner of the screen. You can still drag it.")
         ft.addRow("Move window to", self.cmb_corner)
 
+        grow = QGroupBox("What the tower shows")
+        fg = QFormLayout(grow)
+
+        def combo(key, choices, tip=""):
+            cb = QComboBox()
+            cb.addItems([t for _v, t in choices])
+            cb.setCurrentIndex(next((i for i, (v, _t) in enumerate(choices) if v == s.get(key)), 0))
+            cb.activated.connect(lambda i: ov.set_setting(key, choices[i][0]))
+            cb.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            cb.setMinimumContentsLength(10)
+            if tip:
+                cb.setToolTip(tip)
+            return cb
+
+        def check(key, text, default, tip=""):
+            c = QCheckBox(text)
+            c.setChecked(bool(s.get(key, default)))
+            c.toggled.connect(lambda on: ov.set_setting(key, on))
+            if tip:
+                c.setToolTip(tip)
+            return c
+
+        self.cmb_header = combo("tower_header", [("both", "Track info and clock"), ("clock", "Clock only"),
+                                                 ("none", "No header")])
+        fg.addRow("Header", self.cmb_header)
+        self.cmb_gap = combo("row_gap", [("both", "Seconds and length"), ("time", "Seconds only"),
+                                         ("length", "Length only"), ("none", "No gap")],
+                             "The gap to the uma ahead, on the right of every row.")
+        fg.addRow("Gap", self.cmb_gap)
+        fg.addRow("Gate number", check("row_gate", "Show the gate number", True, "Full tower only."))
+        fg.addRow("Running style", check("row_style", "Show F / P / L / E", True, "Full tower only."))
+        fg.addRow("Players only", check("players_only", "Hide umas without a trainer name (NPCs)", False,
+                                        "Only when somebody in the race has a trainer name."))
+        fg.addRow("Club tags", check("strip_tags", "Show CLUB｜Name as Name", False,
+                                     "Used in the tower, the results board and the skill luck board."))
+        fg.addRow("Team colour", check("tower_team_color", "Stripe for the players of a draft team", True,
+                                       "Needs Team match mode (Draft tab)."))
+        tv.insertWidget(1, grow)
+
         self.cb_board = QCheckBox("After each race")
         self.cb_board.setChecked(bool(s.get("results_board", True)))
         self.cb_board.toggled.connect(lambda on: ov.set_setting("results_board", on))
