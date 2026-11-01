@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.9
+
+- **New (Look tab), more ways to make it yours:**
+  - **Colour sets are clickable chips** now, and there are 14 of them (new: Ocean, Sunset, Forest, Grape, Neon, Paper, Ice, Mono).
+  - **Podium colours:** choose the colour of 1st, 2nd and 3rd place (tower rank and results board).
+  - **Picture shape:** circle, rounded square or square.
+  - **Tower row style:** lines (the top 3 underlined, as before), cards (a soft card behind every row, top 3 outlined) or plain.
+  - **Save my look / Load a look:** keep your colours, text, pictures and row style in a small file, share it, load it back.
+  - The Look tab is split into clearer boxes.
+- **Note:** everything is as before until you change it.
+
 ## 1.0.8
 
 - **New (Tower tab, *What the tower shows*):**

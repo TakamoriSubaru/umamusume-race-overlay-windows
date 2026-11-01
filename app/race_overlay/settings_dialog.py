@@ -1,6 +1,8 @@
 """The Menu / Settings window."""
 
+import json
 import os
+import re
 from PyQt6.QtCore import QSize, QTimer, QUrl, Qt
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtGui import QColor, QFont, QIcon
@@ -17,6 +19,7 @@ from PyQt6.QtWidgets import (
     QFontComboBox,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -419,10 +422,22 @@ class SettingsDialog(QDialog):
         # ---- Look tab
         look = QWidget()                  # Look: pictures, colours, text
         lv = QVBoxLayout(look)
+        g_sets = QGroupBox("Colour sets (click one)")
+        self.grid_sets = QGridLayout(g_sets)
+        lv.addWidget(g_sets)
+        g_cols = QGroupBox("Colours, text and pictures")
+        lg = QVBoxLayout(g_cols)
         f = QFormLayout()
-        lv.addLayout(f)
+        lg.addLayout(f)
         fc = QFormLayout()                # colours and font
-        lv.addLayout(fc)
+        lg.addLayout(fc)
+        lv.addWidget(g_cols)
+        g_pod = QGroupBox("Podium, picture shape and rows")
+        fx = QFormLayout(g_pod)
+        lv.addWidget(g_pod)
+        g_my = QGroupBox("My look")
+        gmv = QHBoxLayout(g_my)
+        lv.addWidget(g_my)
         lv.addStretch(1)
         tower = QWidget()                 # Tower: the race window itself
         tv = QVBoxLayout(tower)
@@ -483,12 +498,47 @@ class SettingsDialog(QDialog):
             lambda i: ov.set_setting("pictures", self._pic_modes[i]))
         f.addRow("Pictures", self.cmb_avatar)
 
-        self.cmb_theme = QComboBox()
-        self.cmb_theme.addItem("Choose a colour set...")
-        self.cmb_theme.addItems(list(THEME_PRESETS))
-        self.cmb_theme.activated.connect(self.on_theme)
-        self.cmb_theme.setToolTip("Sets the background, text and accent colours in one go. You can still change each colour below.")
-        f.addRow("Colour set", self.cmb_theme)
+        self.chips = {}
+        for n, (name, preset) in enumerate(THEME_PRESETS.items()):
+            chip = QPushButton(name.replace(" (default)", ""))
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setToolTip("Sets the background, text and accent colours in one go. You can still change each colour below.")
+            chip.setStyleSheet("QPushButton{background-color:%s;color:%s;border:2px solid %s;border-radius:9px;"
+                               "padding:6px 4px;font-weight:700;}QPushButton:hover{border-color:%s;}"
+                               % (preset["bg"], preset["text_color"], preset["accent"], preset["text_color"]))
+            chip.clicked.connect(lambda _=False, nm=name: self.on_theme(nm))
+            self.grid_sets.addWidget(chip, n // 3, n % 3)
+            self.chips[name] = chip
+
+        self.pod_btns = []
+        for k, label in enumerate(("1st place colour", "2nd place colour", "3rd place colour")):
+            b = QPushButton()
+            key = "podium_%d" % (k + 1)
+            b.clicked.connect(lambda _=False, key=key, b=b: self.pick(key, b))
+            fx.addRow(label, b)
+            self.pod_btns.append((key, b))
+        self._shapes = [("circle", "Circle"), ("rounded", "Rounded square"), ("square", "Square")]
+        self.cmb_shape = QComboBox()
+        self.cmb_shape.addItems([t for _, t in self._shapes])
+        self.cmb_shape.setCurrentIndex(next((i for i, (m, _t) in enumerate(self._shapes)
+                                             if m == s.get("picture_shape", "circle")), 0))
+        self.cmb_shape.activated.connect(lambda i: ov.set_setting("picture_shape", self._shapes[i][0]))
+        fx.addRow("Picture shape", self.cmb_shape)
+        self._rowstyles = [("default", "Lines (top 3 underlined)"), ("cards", "Cards"), ("plain", "Plain")]
+        self.cmb_rowstyle = QComboBox()
+        self.cmb_rowstyle.addItems([t for _, t in self._rowstyles])
+        self.cmb_rowstyle.setCurrentIndex(next((i for i, (m, _t) in enumerate(self._rowstyles)
+                                                if m == s.get("row_style", "default")), 0))
+        self.cmb_rowstyle.activated.connect(lambda i: ov.set_setting("row_style", self._rowstyles[i][0]))
+        fx.addRow("Tower row style", self.cmb_rowstyle)
+
+        btn_save = QPushButton("Save my look...")
+        btn_save.setToolTip("Saves colours, text, pictures and row style to a small file you can share or keep.")
+        btn_save.clicked.connect(self.save_look)
+        btn_load = QPushButton("Load a look...")
+        btn_load.clicked.connect(self.load_look)
+        gmv.addWidget(btn_save)
+        gmv.addWidget(btn_load)
 
         self.btn_bg = QPushButton()
         self.btn_bg.clicked.connect(lambda: self.pick("bg", self.btn_bg))
@@ -1597,6 +1647,8 @@ class SettingsDialog(QDialog):
         self.swatch(self.btn_tc, s["text_color"])
         self.swatch(self.btn_sc, s["sub_color"])
         self.swatch(self.btn_ac, s.get("accent") or "#f5c518")
+        for key, b in self.pod_btns:
+            self.swatch(b, s.get(key) or "#ffffff")
         self.lbl_size.setText("%d%%" % int(float(s["text_scale"]) * 100))
 
     def pick(self, key, btn):
@@ -1605,11 +1657,58 @@ class SettingsDialog(QDialog):
             self.ov.set_setting(key, c.name())
             self.swatch(btn, c.name())
 
-    def on_theme(self, i):
-        if i <= 0:
-            return
-        self.ov.apply_theme(self.cmb_theme.itemText(i))
+    def on_theme(self, name):
+        self.ov.apply_theme(name)
         self.sync_widgets()
+
+    def save_look(self):
+        from .constants import LOOK_KEYS
+        path, _ = QFileDialog.getSaveFileName(self, "Save my look", "my-look.json", "Look files (*.json)")
+        if not path:
+            return
+        data = {k: self.ov.s.get(k) for k in LOOK_KEYS}
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2)
+        except OSError as e:
+            QMessageBox.warning(self, "Save my look", "Could not save the file:\n%s" % e)
+
+    def load_look(self):
+        from .constants import LOOK_KEYS
+        path, _ = QFileDialog.getOpenFileName(self, "Load a look", "", "Look files (*.json)")
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            if not isinstance(data, dict):
+                raise ValueError("not a look file")
+        except (OSError, ValueError) as e:
+            QMessageBox.warning(self, "Load a look", "This is not a look file:\n%s" % e)
+            return
+        hexre = re.compile(r"^#[0-9a-fA-F]{6}$")
+        shapes = {"picture_shape": ("circle", "rounded", "square"),
+                  "row_style": ("default", "cards", "plain"),
+                  "names": ("both", "trainer", "uma")}
+        for k in LOOK_KEYS:
+            if k not in data:
+                continue
+            v = data[k]
+            if k in ("bg", "text_color", "sub_color", "accent", "podium_1", "podium_2", "podium_3"):
+                ok = isinstance(v, str) and hexre.match(v)
+            elif k in shapes:
+                ok = v in shapes[k]
+            elif k in ("bg_opacity", "text_scale"):
+                ok = isinstance(v, (int, float)) and not isinstance(v, bool) and 0.0 <= float(v) <= 2.0
+            elif k == "font":
+                ok = isinstance(v, str)
+            elif k == "pictures":
+                ok = isinstance(v, str) and v in [m for m, _ in self.ov.PICTURE_CHOICES]
+            else:
+                ok = False
+            if ok:
+                self.ov.set_setting(k, v)
+        self.ov.rebuild_settings("Look")
 
     def on_size(self, v):
         self.lbl_size.setText("%d%%" % v)
@@ -1635,7 +1734,8 @@ class SettingsDialog(QDialog):
         self.sp_rows.setValue(int(s["max_rows"]))
         self.cmb_style.setCurrentIndex(0)
         self.sp_crow.setValue(int(s["compact_rows"]))
-        self.cmb_theme.setCurrentIndex(0)
+        self.cmb_shape.setCurrentIndex(0)
+        self.cmb_rowstyle.setCurrentIndex(0)
         self.sync_widgets()
 
     def show_tab(self, name):

@@ -256,7 +256,7 @@ class ResultsBoard(FramelessMixin, QWidget):
     def draw_entry(self, p, ent, x, y, tc, sc, ac):
         ov, h = self.ov, ent["h"]
         place = ent["place"]
-        podium = QColor(PODIUM[place - 1]) if place <= 3 else None
+        podium = ov.podium(place - 1) if place <= 3 else None
         rh = ROW_H - 4
 
         row = QPainterPath()

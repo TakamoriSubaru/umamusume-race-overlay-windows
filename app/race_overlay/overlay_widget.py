@@ -717,10 +717,45 @@ class OverlayWidget(FramelessMixin, QWidget):
         p.setPen(QPen(QColor(255, 255, 255, 30), 1))
         p.drawLine(QPointF(0, self.hh - 1), QPointF(lw, self.hh - 1))
 
+    def podium(self, i):
+        """Colour of place i (0 = first) on the podium, from the Look tab."""
+        c = QColor(str(self.s.get("podium_%d" % (i + 1), "")))
+        return c if c.isValid() else QColor(PODIUM[i])
+
+    def shape_path(self, rect):
+        """The outline of a picture: circle, rounded square or square (Look tab)."""
+        path = QPainterPath()
+        shape = self.s.get("picture_shape", "circle")
+        if shape == "rounded":
+            path.addRoundedRect(rect, rect.width() * 0.22, rect.height() * 0.22)
+        elif shape == "square":
+            path.addRoundedRect(rect, 2, 2)
+        else:
+            path.addEllipse(rect)
+        return path
+
+    def draw_row_base(self, p, h, lw, y):
+        """What is behind a row: the podium line (default), a card, or nothing (Look tab, Row style)."""
+        style = self.s.get("row_style", "default")
+        rh = self.rh
+        if style == "cards":
+            card = QPainterPath()
+            card.addRoundedRect(QRectF(3, y + 2, lw - 6, rh - 4), 9, 9)
+            fill = QColor(self.s["text_color"]); fill.setAlpha(18)
+            p.fillPath(card, fill)
+            if h.rank < 3:
+                edge = self.podium(h.rank); edge.setAlpha(150)
+                p.setPen(QPen(edge, 1.2)); p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawPath(card)
+        elif style != "plain" and h.rank < 3:
+            c = self.podium(h.rank); c.setAlpha(110)
+            p.setPen(QPen(c, 1))
+            p.drawLine(QPointF(0, y + rh - 1), QPointF(lw, y + rh - 1))
+
     def draw_circle_picture(self, p, rect, pm, letter, color):
-        """A round picture (cropped to a square first). Without a picture: a dark circle with a letter."""
-        circ = QPainterPath()
-        circ.addEllipse(rect)
+        """A picture (circle, rounded square or square; cropped to a square first). Without a picture: a dark
+        shape with a letter."""
+        circ = self.shape_path(rect)
         p.save()
         p.setClipPath(circ, Qt.ClipOperation.IntersectClip)    # stay inside the clip of the rows
         p.fillPath(circ, QColor("#383858"))
@@ -747,7 +782,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             ring = QColor(self.s["bg"])
             p.setPen(QPen(ring, 2))
             p.setBrush(ring)
-            p.drawEllipse(badge.adjusted(-1.5, -1.5, 1.5, 1.5))
+            p.drawPath(self.shape_path(badge.adjusted(-1.5, -1.5, 1.5, 1.5)))
             self.draw_circle_picture(p, badge, ppm, "", tc)
 
     def draw_rank_arrow(self, p, h, y):
@@ -807,13 +842,10 @@ class OverlayWidget(FramelessMixin, QWidget):
         """A small row: place, picture, trainer (and uma) on the left, the gap or finish time on the right."""
         tc, sc = QColor(self.s["text_color"]), QColor(self.s["sub_color"])
         rh = self.rh
-        if h.rank < 3:
-            c = QColor(PODIUM[h.rank]); c.setAlpha(110)
-            p.setPen(QPen(c, 1))
-            p.drawLine(QPointF(0, y + rh - 1), QPointF(lw, y + rh - 1))
+        self.draw_row_base(p, h, lw, y)
         self.draw_team_stripe(p, h, y)
         p.setFont(self.fnt(15, True))
-        p.setPen(QColor(PODIUM[h.rank]) if h.rank < 3 else tc)
+        p.setPen(self.podium(h.rank) if h.rank < 3 else tc)
         p.drawText(QRectF(2, y, 24, rh), Qt.AlignmentFlag.AlignCenter, str(h.rank + 1))
         self.draw_rank_arrow(p, h, y)
         asz = 24
@@ -853,16 +885,12 @@ class OverlayWidget(FramelessMixin, QWidget):
             return
         if self.compact():
             return self.draw_row_compact(p, h, lw, y)
-        # podium underline
-        if h.rank < 3:
-            c = QColor(PODIUM[h.rank]); c.setAlpha(110)
-            p.setPen(QPen(c, 1))
-            p.drawLine(QPointF(0, y + self.rh - 1), QPointF(lw, y + self.rh - 1))
+        self.draw_row_base(p, h, lw, y)
 
         self.draw_team_stripe(p, h, y)
         # rank
         p.setFont(self.fnt(17, True))
-        p.setPen(QColor(PODIUM[h.rank]) if h.rank < 3 else tc)
+        p.setPen(self.podium(h.rank) if h.rank < 3 else tc)
         p.drawText(QRectF(2, y, 26, self.rh), Qt.AlignmentFlag.AlignCenter, str(h.rank + 1))
         self.draw_rank_arrow(p, h, y)
 

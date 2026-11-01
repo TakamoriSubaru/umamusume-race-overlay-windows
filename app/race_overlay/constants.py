@@ -116,6 +116,11 @@ DEFAULT_SETTINGS = {
     "players_only": False,     # tower: hide umas that have no trainer name (NPCs)
     "strip_tags": False,       # names: "CLUB｜Name" shows as "Name"
     "tower_team_color": True,  # tower: a team colour stripe for the players of a draft team
+    "podium_1": "#d4a017",     # colour of 1st place (tower rank, results board)
+    "podium_2": "#a8a8b8",     # 2nd
+    "podium_3": "#b87040",     # 3rd
+    "picture_shape": "circle", # "circle", "rounded" or "square"
+    "row_style": "default",    # tower rows: "default" (podium lines), "cards" (a card behind every row) or "plain"
     "names": "both",           # what the rows say: "both" = trainer and uma, "trainer" = trainer only, "uma" = uma only
     "pictures": "both",        # "both" = uma image + small player picture, "uma" = uma image only,
                                # "player" = player picture in the big circle (uma image if the player has none)
@@ -211,7 +216,20 @@ THEME_PRESETS = {
     "Mint":                     {"bg": "#0f2421", "text_color": "#effff9", "sub_color": "#8fcfbf", "accent": "#4fe3b5"},
     "Daylight":                 {"bg": "#f3f4f8", "text_color": "#1a1a28", "sub_color": "#5a5a72", "accent": "#c0392b"},
     "High contrast":            {"bg": "#000000", "text_color": "#ffffff", "sub_color": "#d0d0d0", "accent": "#ffff00"},
+    "Ocean":                    {"bg": "#0a1a2b", "text_color": "#eaf6ff", "sub_color": "#8fb4d4", "accent": "#3fb8ff"},
+    "Sunset":                   {"bg": "#2a1218", "text_color": "#fff3ec", "sub_color": "#e0a58f", "accent": "#ff8a3d"},
+    "Forest":                   {"bg": "#101d14", "text_color": "#f0fff2", "sub_color": "#93bf9c", "accent": "#7bd35a"},
+    "Grape":                    {"bg": "#1b1030", "text_color": "#f6eeff", "sub_color": "#b9a2dc", "accent": "#b57bff"},
+    "Neon":                     {"bg": "#05050a", "text_color": "#f2fffb", "sub_color": "#7fe9d5", "accent": "#00ffd0"},
+    "Paper":                    {"bg": "#efe9dc", "text_color": "#2b261d", "sub_color": "#7a705e", "accent": "#b5651d"},
+    "Ice":                      {"bg": "#e8f1f8", "text_color": "#12263a", "sub_color": "#56708a", "accent": "#1b7fd1"},
+    "Mono":                     {"bg": "#1b1b1b", "text_color": "#f2f2f2", "sub_color": "#9a9a9a", "accent": "#ffffff"},
 }
+
+
+# the settings that make up "my look" (Save my look / Load a look in the Look tab)
+LOOK_KEYS = ("bg", "bg_opacity", "text_color", "sub_color", "accent", "text_scale", "font",
+             "podium_1", "podium_2", "podium_3", "picture_shape", "row_style", "pictures", "names")
 
 
 ARROW_SECONDS = 2.5        # how long a position-change arrow stays
