@@ -56,37 +56,70 @@ SERVER_MARKER = os.path.join(TMP_DIR, "race-overlay-server.started")
 
 
 def stop_started_server():
-    """Close the Race Overlay server, but only if the start script started it (so a Race Overlay you
-    opened yourself is left alone). Returns how many processes were asked to stop."""
+    """Close Race Overlay's server (server.exe) when the overlay quits. Returns how many processes were stopped.
+    Only server.exe is closed: a Race Overlay window you opened yourself stays. Windows: closes what this
+    program started. Linux: asks every server.exe to stop, and forces the ones that do not."""
     if IS_WINDOWS:
         from .winserver import stop_started
         return stop_started()
     import signal
-    if not os.path.exists(SERVER_MARKER):
-        return 0
-    n, me = 0, os.getpid()
-    try:
-        pids = [int(d) for d in os.listdir("/proc") if d.isdigit() and int(d) != me]
-    except OSError:
-        pids = []
-    for pid in pids:
+    import time
+    me = os.getpid()
+
+    def server_pids():
         try:
-            with open("/proc/%d/cmdline" % pid, "rb") as f:
-                cmd = f.read().lower()
+            pids = [int(d) for d in os.listdir("/proc") if d.isdigit() and int(d) != me]
         except OSError:
-            continue
-        first = cmd.split(b"\0")[0]
-        if first.endswith(b"server.exe") or (b"server.exe" in cmd and b"wine" in first):
+            return []
+        found = []
+        for pid in pids:
             try:
-                os.kill(pid, signal.SIGTERM)
-                n += 1
+                with open("/proc/%d/cmdline" % pid, "rb") as f:
+                    cmd = f.read().lower()
+            except OSError:
+                continue
+            first = cmd.split(b"\0")[0]
+            if first.endswith(b"server.exe") or (b"server.exe" in cmd and b"wine" in first):
+                found.append(pid)
+        return found
+
+    todo = server_pids()
+    for pid in todo:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    for _ in range(15):                          # up to 1.5 s to stop by itself
+        if not any(os.path.exists("/proc/%d" % p) for p in todo):
+            break
+        time.sleep(0.1)
+    for pid in todo:                             # still there: force it
+        if os.path.exists("/proc/%d" % pid):
+            try:
+                os.kill(pid, signal.SIGKILL)
             except OSError:
                 pass
     try:
         os.remove(SERVER_MARKER)
     except OSError:
         pass
-    return n
+    return len(todo)
+
+
+def install_exit_hooks(quit_cb, stop_cb):
+    """Also stop the server when the overlay is ended from outside: Ctrl+C or closing the terminal
+    (quit_cb = the normal quit) and, as a last resort, when Python exits (stop_cb)."""
+    import atexit
+    import signal
+    for name in ("SIGINT", "SIGTERM", "SIGHUP"):
+        sig = getattr(signal, name, None)
+        if sig is None:
+            continue
+        try:
+            signal.signal(sig, lambda *_a: quit_cb())
+        except (ValueError, OSError):
+            pass
+    atexit.register(stop_cb)
 
 
 def _safe_listdir(folder):

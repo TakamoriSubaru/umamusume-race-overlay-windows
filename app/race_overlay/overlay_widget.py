@@ -51,7 +51,7 @@ from .match_board import MatchBoard
 from .standings_board import StandingsBoard
 from .tray import make_tray_icon
 from .updater import restart_program
-from .util import fmt_time, open_folder, stop_started_server
+from .util import fmt_time, install_exit_hooks, open_folder, stop_started_server
 
 
 class Horse:
@@ -223,6 +223,11 @@ class OverlayWidget(FramelessMixin, QWidget):
         source.clock.connect(self.on_clock)
         source.status.connect(self.on_status)
         source.quit_request.connect(self.quit_app)
+        install_exit_hooks(lambda: QTimer.singleShot(0, self.quit_app),
+                           lambda: stop_started_server() if self.s.get("stop_server", True) else None)
+        self._signal_tick = QTimer(self)             # lets Python see Ctrl+C while Qt is running
+        self._signal_tick.start(500)
+        self._signal_tick.timeout.connect(lambda: None)
         source.offset = float(self.cfg.get("sync_offset", 0.0))
         source.delay = float(self.s.get("start_delay", 12.0))
         source.start()

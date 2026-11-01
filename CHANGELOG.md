@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.12
+
+- **Fix: the Race Overlay server is closed when you close the overlay.**
+  - It is closed whichever way you end the program: Quit in the menu, the window's close button, Ctrl+C, or closing its terminal.
+  - On Windows it closes what the program started, together with anything it started.
+  - Only `server.exe` is closed. A Race Overlay window you opened yourself stays open.
+
 ## 1.0.11
 
 - **Cup Score tab, easier to use:**
