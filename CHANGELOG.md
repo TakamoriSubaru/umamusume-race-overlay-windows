@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.11
+
+- **Cup Score tab, easier to use:**
+  - The choice *Counted by this program* / *My Google Sheet* is now at the top, with a short explanation of both.
+  - Google Sheet setup is **3 numbered steps** and a **Connect** button next to the link.
+  - A **green / red status line** tells you if the sheet was read (and names the first players it found) or what to fix: not shared, wrong link, no internet.
+- **Note:** how the sheet is read has not changed.
+
 ## 1.0.10
 
 - **Settings window, more compact:** the tabs are smaller and sit in one tight row.

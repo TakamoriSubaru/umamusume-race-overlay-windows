@@ -953,42 +953,21 @@ class SettingsDialog(QDialog):
         ov, s = self.ov, self.ov.s
         st = QWidget()
         v = QVBoxLayout(st)
-        intro = QLabel("After every race each player gets points: <b>1st gets as many points as there are "
-                       "players</b>, the last one gets 1 (10 players: 10, 9, 8 ... 1). The points are added up "
-                       "and the <b>standings board</b> flips through everybody while the next race is set up. "
-                       "In OBS it is its own window: <i>" + STANDINGS_NAME + "</i>.")
+        intro = QLabel("<b>Cup Score shows who is winning.</b> Pick where the points come from, then add the window "
+                       "<i>" + STANDINGS_NAME + "</i> to OBS as a source. The board appears after the results board "
+                       "and stays until the next race.<br>"
+                       "&bull; <b>Counted by this program:</b> nothing to type. 1st gets as many points as there are "
+                       "players, the last one gets 1.<br>"
+                       "&bull; <b>A spreadsheet:</b> you keep the scores in your Google Sheet and the board follows it "
+                       "by itself (steps below).")
         intro.setWordWrap(True)
         v.addWidget(intro)
-
-        cb1 = QCheckBox("Give points after every race (PTS column on the results board)")
-        cb1.setChecked(bool(s.get("scoring", True)))
-        cb1.toggled.connect(lambda on: ov.set_setting("scoring", on))
-        v.addWidget(cb1)
-        cb2 = QCheckBox("Show the standings board after the results board (stays until the next race)")
-        cb2.setChecked(bool(s.get("standings_board", True)))
-        cb2.toggled.connect(lambda on: ov.set_setting("standings_board", on))
-        v.addWidget(cb2)
-        erow = QHBoxLayout()
-        erow.addWidget(QLabel("Show it after every"))
-        sp_every = QSpinBox()
-        sp_every.setRange(0, 99)
-        sp_every.setSpecialValueText("never (only by hand)")
-        sp_every.setSuffix(" race(s)")
-        sp_every.setValue(int(s.get("standings_every", 1)))
-        sp_every.valueChanged.connect(lambda x: (ov.set_setting("standings_every", int(x)),
-                                                 ov.cfg.__setitem__("races_since_standings", 0)))
-        erow.addWidget(sp_every)
-        erow.addStretch(1)
-        v.addLayout(erow)
-        bnow = QPushButton("Show / hide the standings now")
-        bnow.clicked.connect(lambda: ov.show_standings_now())
-        v.addWidget(bnow)
 
         box = QGroupBox("Where do the standings come from?")
         bl = QVBoxLayout(box)
         self.cmb_smode = QComboBox()
-        self.cmb_smode.addItem("Counted by this program", "local")
-        self.cmb_smode.addItem("A spreadsheet (link or file)", "sheet")
+        self.cmb_smode.addItem("Counted by this program (nothing to set up)", "local")
+        self.cmb_smode.addItem("My Google Sheet (link or file)", "sheet")
         self.cmb_smode.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.cmb_smode.setMinimumContentsLength(10)
         self.cmb_smode.setCurrentIndex(1 if s.get("standings_mode") == "sheet" else 0)
@@ -999,20 +978,30 @@ class SettingsDialog(QDialog):
         bl2 = QVBoxLayout(sheetw)
         bl2.setContentsMargins(0, 0, 0, 0)
         bl.addWidget(sheetw)
-        bl2.addWidget(QLabel("Google Sheet link, or a file:"))
+        steps = QLabel("<b>1.</b> In Google Sheets press <b>Share</b>, set General access to <i>Anyone with the link</i> "
+                       "and the role to <i>Viewer</i>.<br>"
+                       "<b>2.</b> Open the tab with the scores and copy the link from the address bar.<br>"
+                       "<b>3.</b> Paste it here and press <b>Connect</b>. Then just keep filling in your sheet: the "
+                       "board follows it about once a minute.")
+        steps.setWordWrap(True)
+        bl2.addWidget(steps)
+        bl2.addWidget(QLabel("Your Google Sheet link (or a file):"))
         row = QHBoxLayout()
         self.ed_sheet = QLineEdit(s.get("standings_sheet", ""))
         self.ed_sheet.setPlaceholderText("Google Sheets link or file path")
         self.ed_sheet.setMinimumWidth(100)
         self.ed_sheet.editingFinished.connect(self.apply_sheet)
         row.addWidget(self.ed_sheet)
+        bc = QPushButton("Connect")
+        bc.setObjectName("primary")
+        bc.clicked.connect(self.apply_sheet)
+        row.addWidget(bc)
         bf = QPushButton("File...")
         bf.clicked.connect(self.choose_sheet_file)
         row.addWidget(bf)
         bl2.addLayout(row)
-        note = QLabel("For a Google Sheet: <b>Share</b> &rarr; General access &rarr; <i>Anyone with the link</i> "
-                      "&rarr; Viewer. The link of the tab you want (with <i>gid=</i>) picks that tab. "
-                      "The program only reads it and checks again every minute.")
+        note = QLabel("The program only reads your sheet, it never changes it. The link of the tab you want "
+                      "(with <i>gid=</i>) picks that tab.")
         note.setWordWrap(True)
         bl2.addWidget(note)
         cols = Collapsible("Columns (only if the automatic way fails)")
@@ -1047,6 +1036,31 @@ class SettingsDialog(QDialog):
         self.lbl_sheet.setWordWrap(True)
         bl2.addWidget(self.lbl_sheet)
         v.addWidget(box)
+
+        cb1 = QCheckBox("Give points after every race (PTS column on the results board)")
+        cb1.setChecked(bool(s.get("scoring", True)))
+        cb1.toggled.connect(lambda on: ov.set_setting("scoring", on))
+        v.addWidget(cb1)
+        cb2 = QCheckBox("Show the standings board after the results board (stays until the next race)")
+        cb2.setChecked(bool(s.get("standings_board", True)))
+        cb2.toggled.connect(lambda on: ov.set_setting("standings_board", on))
+        v.addWidget(cb2)
+        erow = QHBoxLayout()
+        erow.addWidget(QLabel("Show it after every"))
+        sp_every = QSpinBox()
+        sp_every.setRange(0, 99)
+        sp_every.setSpecialValueText("never (only by hand)")
+        sp_every.setSuffix(" race(s)")
+        sp_every.setValue(int(s.get("standings_every", 1)))
+        sp_every.valueChanged.connect(lambda x: (ov.set_setting("standings_every", int(x)),
+                                                 ov.cfg.__setitem__("races_since_standings", 0)))
+        erow.addWidget(sp_every)
+        erow.addStretch(1)
+        v.addLayout(erow)
+        bnow = QPushButton("Show / hide the standings now")
+        bnow.clicked.connect(lambda: ov.show_standings_now())
+        v.addWidget(bnow)
+
 
         rbox = QGroupBox("Rounds (sheet)")
         rl = QVBoxLayout(rbox)
@@ -1391,14 +1405,26 @@ class SettingsDialog(QDialog):
         if ov.s.get("standings_mode") != "sheet":
             self.cmb_smode.setCurrentIndex(1)        # reading a sheet only makes sense in sheet mode
         ov.standings.refresh(True)
-        self.lbl_sheet.setText("Reading...")
+        self.set_sheet_status("Reading...")
+
+    def set_sheet_status(self, text):
+        """Green when the sheet was read, red when something needs fixing."""
+        text = text or ""
+        if text.startswith("OK"):
+            css = "color:#6ee7b7;font-weight:700;"
+        elif text and text != "Reading...":
+            css = "color:#ff9aa8;font-weight:700;"
+        else:
+            css = ""
+        self.lbl_sheet.setStyleSheet(css)
+        self.lbl_sheet.setText(text)
 
     def apply_view(self):
         self.ov.set_standings_view(self.cmb_view.currentData())
         self.cmb_smode.blockSignals(True)
         self.cmb_smode.setCurrentIndex(1)
         self.cmb_smode.blockSignals(False)
-        self.lbl_sheet.setText("Reading...")
+        self.set_sheet_status("Reading...")
 
     def apply_rounds(self):
         ov = self.ov
@@ -1407,7 +1433,7 @@ class SettingsDialog(QDialog):
         ov.save_settings()
         ov.standings.refresh(True)
         ov.standings.apply_raw()
-        self.lbl_sheet.setText("Reading...")
+        self.set_sheet_status("Reading...")
 
     def choose_sheet_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "Choose the score file", os.path.expanduser("~"),
@@ -1771,7 +1797,7 @@ class SettingsDialog(QDialog):
         if self.isVisible() and self._tabs.currentWidget() is self._draft_tab:
             self.update_match_label()
         if self.isVisible() and self._tabs.currentWidget() is self._stand_tab:
-            self.lbl_sheet.setText(ov.standings.status or "")
+            self.set_sheet_status(ov.standings.status or "")
             self.update_book_label()
         self.cb_prev.blockSignals(True)
         self.cb_prev.setChecked(self.ov.preview)

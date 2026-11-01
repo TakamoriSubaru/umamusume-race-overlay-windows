@@ -82,6 +82,20 @@ def _xlsx_rows(path, sheet=""):
         return rows
 
 
+def friendly_error(msg):
+    """Plain words for the usual reasons a sheet cannot be read."""
+    m = str(msg or "")
+    low = m.lower()
+    if "sign-in" in low or "401" in m or "403" in m:
+        return ("Google says no. In Google Sheets press Share, set General access to \"Anyone with the link\" "
+                "and the role to Viewer, then press Connect again.")
+    if "404" in m:
+        return "That link does not open a sheet. Copy the whole link from the address bar of the sheet."
+    if "urlopen" in low or "getaddrinfo" in low or "timed out" in low or "unreachable" in low or "network" in low:
+        return "No internet right now. The last scores stay on the board and it tries again in a minute."
+    return m
+
+
 def load_rows(source, sheet=""):
     """source = Google Sheets link, other web link to a CSV, or a path to .csv / .xlsx. Returns rows of text."""
     source = (source or "").strip().strip('"')

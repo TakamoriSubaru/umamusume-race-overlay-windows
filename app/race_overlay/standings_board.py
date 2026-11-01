@@ -12,7 +12,7 @@ from .constants import PODIUM, STANDINGS_NAME
 from .frameless import fit_window
 from .results_board import FOOT_H, GUTTER, PAD, SUB_H, TOP_H, ResultsBoard
 from .scoring import rank_rows
-from .sheets import SINGLE_VIEWS, load_rows, read_view, view_title
+from .sheets import SINGLE_VIEWS, friendly_error, load_rows, read_view, view_title
 from .updater import Job
 
 ROW_H = 38
@@ -132,13 +132,17 @@ class StandingsBoard(ResultsBoard):
         except ValueError as e:
             self.status = str(e)
             return
-        self.status = ("OK: %d players read from the sheet." % len(rows)) if rows else \
-            "The sheet was read but no player rows were found. Check the columns and first row."
+        if rows:
+            names = ", ".join(str(r["name"]) for r in rows[:3])
+            self.status = "OK: %d players read from the sheet (%s%s)." % (len(rows), names, ", ..." if len(rows) > 3 else "")
+        else:
+            self.status = ("The sheet was read but no player rows were found. Is this the right tab? "
+                           "Open the tab you want in Google Sheets and copy its link again.")
         if rows:
             self.set_rows(rows)
 
     def _sheet_fail(self, msg):
-        self.status = "Could not read the sheet: " + msg    # the last good list stays on screen
+        self.status = "Could not read the sheet. " + friendly_error(msg)    # the last good list stays on screen
         self._after_job()
 
     def auto_footer(self):
