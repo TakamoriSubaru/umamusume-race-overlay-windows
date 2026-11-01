@@ -148,7 +148,7 @@ def run_checks(ov):
                         "" if races else "No race files in it yet."))
         else:
             out.append(("bad", "Saved races folder not found: %s" % (folder or "(none chosen)"),
-                        "Choose it in the Race data tab."))
+                        "Choose it in the Data tab."))
     else:
         out.append(("info", "Source: %s" % kind, ""))
         if IS_WINDOWS:

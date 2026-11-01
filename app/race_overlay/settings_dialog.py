@@ -327,7 +327,7 @@ class SettingsDialog(QDialog):
         mv.addWidget(bq)
         tabs.addTab(self.scrolled(mt), "Home")
 
-        # ---- Race data tab (where the races come from + the saved races folder)
+        # ---- Data tab (where the races come from + the saved races folder)
         rt = QWidget()
         rv = QVBoxLayout(rt)
         sbox = QGroupBox("Where do the races come from?")
@@ -415,7 +415,7 @@ class SettingsDialog(QDialog):
         wl.addWidget(know)
         rv.addWidget(wbox)
         rv.addStretch(1)
-        tabs.addTab(self.scrolled(rt), "Race data")
+        tabs.addTab(self.scrolled(rt), "Data")
         self.update_source_label()
         self.refresh_count()
 
@@ -731,7 +731,7 @@ class SettingsDialog(QDialog):
         sp_ls.setValue(float(s.get("luck_seconds", 10.0)))
         sp_ls.valueChanged.connect(lambda v: ov.set_setting("luck_seconds", float(v)))
         fl.addRow("Stays", sp_ls)
-        bnote = QLabel("<i>The standings board has its own settings in the Points tab. Each board is its own window "
+        bnote = QLabel("<i>The standings board has its own settings in the Cup Score tab. Each board is its own window "
                        "in OBS. Drag a board to move it, pull its edges to resize it.</i>")
         bnote.setWordWrap(True)
         bv.insertWidget(0, bnote)
@@ -1159,7 +1159,7 @@ class SettingsDialog(QDialog):
         sc = self.scrolled(st)
         self._stand_tab = sc
         self.update_book_label()
-        tabs.addTab(sc, "Points")
+        tabs.addTab(sc, "Cup Score")
 
     # ---- draft tab (team match)
     def build_draft_tab(self, tabs):

@@ -120,4 +120,4 @@ class WelcomeDialog(QDialog):
         if self.chosen:
             from .setups import get_setup
             tab = (get_setup(self.chosen) or {}).get("tab")
-        self.ov.rebuild_settings(tab if tab in ("Draft", "Points") else "Home")
+        self.ov.rebuild_settings(tab if tab in ("Draft", "Cup Score") else "Home")

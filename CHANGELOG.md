@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.10
+
+- **Settings window, more compact:** the tabs are smaller and sit in one tight row.
+- **Tabs renamed:** *Race data* is now **Data**, and *Points* is now **Cup Score**. Nothing else changed; every setting is where it was.
+
 ## 1.0.9
 
 - **New (Look tab), more ways to make it yours:**

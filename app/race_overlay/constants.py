@@ -130,7 +130,7 @@ DEFAULT_SETTINGS = {
     "sub_color": "#9898b8",
     "text_scale": 1.0,
     "font": "",                # "" = default font
-    # --- saved races (Race data tab) - these are NOT touched by "Reset look to defaults"
+    # --- saved races (Data tab) - these are NOT touched by "Reset look to defaults"
     "source": "",              # "" = follow the start script, "live" = Race Overlay server, "watch" = saved races folder
     "saved_races_dir": "",     # folder with your saved race JSON files (empty = the one from settings.sh / --watch)
     "watch_subfolders": True,  # also look inside the folders below it (Career, Room match, ...)
@@ -147,7 +147,7 @@ DEFAULT_SETTINGS = {
     # --- results board (the window that shows after the race)
     "results_board": True,     # show the results board after each race
     "results_seconds": 10.0,   # how long it stays (0 = until the next race starts)
-    # --- points and standings board (Points tab)
+    # --- points and standings board (Cup Score tab)
     "scoring": True,           # give points after every race: 1st = number of players, last = 1
     "standings_board": True,   # show the standings board after the results board, until the next race
     "standings_mode": "local", # "local" = points counted by this program, "sheet" = read from a sheet

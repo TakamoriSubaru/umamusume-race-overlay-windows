@@ -1248,7 +1248,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             self.set_setting("tower_style", tower_style)
         self.standings.refresh(True)
         if rebuild:
-            QTimer.singleShot(0, lambda: self.rebuild_settings(st.get("tab") if st.get("tab") in ("Draft", "Points") else None))
+            QTimer.singleShot(0, lambda: self.rebuild_settings(st.get("tab") if st.get("tab") in ("Draft", "Cup Score") else None))
 
     def rebuild_settings(self, tab=None):
         """Open the settings window again from scratch, so every checkbox shows the new values."""
