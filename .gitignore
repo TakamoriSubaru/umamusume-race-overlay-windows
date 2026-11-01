@@ -17,6 +17,7 @@ tools/
 
 # The original Race Overlay is someone else's program: never upload it
 Race Overlay/
+Server Files/
 Race Overlay*/
 server.exe
 *.pak

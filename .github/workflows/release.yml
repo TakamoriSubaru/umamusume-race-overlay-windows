@@ -56,7 +56,7 @@ jobs:
 
       - name: Get the server files (they go inside the zip)
         # The owner uploads his permitted copy once as the asset Race-Overlay.zip of the (pre)release
-        # "race-overlay-files" (any .zip). It is put next to the program as the folder "server" and its files are
+        # "race-overlay-files" (any .zip). It is put next to the program as the folder "Server Files" and its files are
         # never changed. Without it the zip is made with no server inside (and a warning).
         shell: pwsh
         continue-on-error: true
@@ -80,9 +80,9 @@ jobs:
           $name = "race-overlay-windows-$ver"
           Copy-Item app/icon.png, README.md, CHANGELOG.md dist/UmaRaceOverlay/
           Rename-Item -Path dist/UmaRaceOverlay -NewName $name
-          # the server files (Race Overlay) go inside, in the folder "server" next to UmaRaceOverlay.exe
+          # the server files (Race Overlay) go inside, in the folder "Server Files" next to UmaRaceOverlay.exe
           if ($env:RO_DIR -and (Test-Path "$env:RO_DIR/Race Overlay.exe")) {
-            Copy-Item -Recurse $env:RO_DIR "dist/$name/server"
+            Copy-Item -Recurse $env:RO_DIR "dist/$name/Server Files"
             Write-Host "Server files added to the zip."
           } else {
             Write-Host "::warning::No server files (release race-overlay-files): this zip has NO server inside."

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.13
+
+- **The server files folder is now called `Server Files`.** Releases that include the server put it in a folder with that name next to the program.
+- The program also finds a `Server Files` folder next to the program, in Documents, and anywhere it looked before. The old names (`server`, `Race Overlay`) still work.
+- `Server Files/` is kept out of GitHub by `.gitignore`.
+
 ## 1.0.12
 
 - **Fix: the Race Overlay server is closed when you close the overlay.**
