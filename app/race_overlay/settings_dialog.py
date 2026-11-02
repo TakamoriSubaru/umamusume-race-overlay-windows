@@ -719,6 +719,35 @@ class SettingsDialog(QDialog):
         cmb_det.setCurrentIndex(max(0, cmb_det.findData(s.get("results_details", "both"))))
         cmb_det.currentIndexChanged.connect(lambda _i: (ov.set_setting("results_details", cmb_det.currentData()), ov.board.update()))
         fr.addRow("Each row shows", cmb_det)
+
+        def board_combo(form, label, key, choices, after):
+            cb = QComboBox()
+            for k, text in choices:
+                cb.addItem(text, k)
+            cb.setCurrentIndex(max(0, cb.findData(str(s.get(key)))))
+            cb.currentIndexChanged.connect(lambda _i: (ov.set_setting(key, cb.currentData()), after()))
+            form.addRow(label, cb)
+            return cb
+
+        def refit_results():
+            if ov.board.entries:
+                ov.board.set_data(ov.board.entries, ov.board.footer)
+            for b in (ov.board, ov.luck, ov.standings, ov.mboard):
+                b.update()
+        self.cmb_rstyle = board_combo(fr, "Row style", "results_style",
+                                      (("cards", "Cards"), ("lines", "Lines"), ("plain", "Plain")), refit_results)
+        self.cmb_rcols = board_combo(fr, "Columns", "results_columns",
+                                     (("auto", "Automatic (2 columns above 6 umas)"), ("1", "One column"),
+                                      ("2", "Two columns")), refit_results)
+        cb_win = QCheckBox("Tint the winner's row in the accent colour")
+        cb_win.setChecked(bool(s.get("results_winner", True)))
+        cb_win.toggled.connect(lambda on: (ov.set_setting("results_winner", on), refit_results()))
+        fr.addRow("Winner", cb_win)
+        self.cmb_bhead = board_combo(fr, "Top strip (all boards)", "board_header",
+                                     (("band", "Dark strip and accent bar"), ("line", "Accent bar only"),
+                                      ("plain", "Title only")), refit_results)
+        self.cmb_bfoot = board_combo(fr, "Bottom strip (all boards)", "board_footer",
+                                     (("band", "Dark strip"), ("plain", "Text only")), refit_results)
         ed_lt = QLineEdit(s.get("luck_title", ""))
         ed_lt.setPlaceholderText("SKILL LUCK")
         ed_lt.editingFinished.connect(lambda: (ov.set_setting("luck_title", ed_lt.text().strip()), ov.luck.update()))
@@ -1715,7 +1744,11 @@ class SettingsDialog(QDialog):
         hexre = re.compile(r"^#[0-9a-fA-F]{6}$")
         shapes = {"picture_shape": ("circle", "rounded", "square"),
                   "row_style": ("default", "cards", "plain"),
-                  "names": ("both", "trainer", "uma")}
+                  "names": ("both", "trainer", "uma"),
+                  "board_header": ("band", "line", "plain"),
+                  "board_footer": ("band", "plain"),
+                  "results_style": ("cards", "lines", "plain"),
+                  "results_columns": ("auto", "1", "2")}
         for k in LOOK_KEYS:
             if k not in data:
                 continue
@@ -1728,6 +1761,8 @@ class SettingsDialog(QDialog):
                 ok = isinstance(v, (int, float)) and not isinstance(v, bool) and 0.0 <= float(v) <= 2.0
             elif k == "font":
                 ok = isinstance(v, str)
+            elif k == "results_winner":
+                ok = isinstance(v, bool)
             elif k == "pictures":
                 ok = isinstance(v, str) and v in [m for m, _ in self.ov.PICTURE_CHOICES]
             else:
@@ -1761,6 +1796,8 @@ class SettingsDialog(QDialog):
         self.cmb_style.setCurrentIndex(0)
         self.sp_crow.setValue(int(s["compact_rows"]))
         self.cmb_shape.setCurrentIndex(0)
+        for cb in (self.cmb_rstyle, self.cmb_rcols, self.cmb_bhead, self.cmb_bfoot):
+            cb.setCurrentIndex(0)
         self.cmb_rowstyle.setCurrentIndex(0)
         self.sync_widgets()
 

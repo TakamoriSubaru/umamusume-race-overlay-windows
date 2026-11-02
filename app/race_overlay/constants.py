@@ -181,6 +181,11 @@ DEFAULT_SETTINGS = {
     "match_show_picks": True,         # match board: the umas each team drafted
     "luck_board": False,              # show the skill luck board (luckiest / unluckiest) after the results board
     "results_title": "",              # own title for the results board ("" = RACE RESULTS)
+    "board_header": "band",           # all boards: top strip "band" (strip + accent bar), "line" (accent line) or "plain"
+    "board_footer": "band",           # all boards: bottom strip "band" or "plain"
+    "results_style": "cards",         # results board rows: "cards", "lines" or "plain"
+    "results_columns": "auto",        # results board: "auto" (one column up to 6 umas), "1" or "2"
+    "results_winner": True,           # results board: the winner's row is tinted in the accent colour
     "results_details": "both",        # results board: "both" (time + gap), "time", "none"
     "luck_title": "",                 # own title for the luck board ("" = SKILL LUCK)
     "luck_seconds": 10.0,             # how long the luck board stays (0 = until the next race)
@@ -229,7 +234,8 @@ THEME_PRESETS = {
 
 # the settings that make up "my look" (Save my look / Load a look in the Look tab)
 LOOK_KEYS = ("bg", "bg_opacity", "text_color", "sub_color", "accent", "text_scale", "font",
-             "podium_1", "podium_2", "podium_3", "picture_shape", "row_style", "pictures", "names")
+             "podium_1", "podium_2", "podium_3", "picture_shape", "row_style", "pictures", "names",
+             "board_header", "board_footer", "results_style", "results_columns", "results_winner")
 
 
 ARROW_SECONDS = 2.5        # how long a position-change arrow stays

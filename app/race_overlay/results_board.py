@@ -96,7 +96,8 @@ class ResultsBoard(FramelessMixin, QWidget):
         self.entries = list(entries)
         self.footer = footer or ""
         n = len(self.entries)
-        self.cols = 1 if n <= ONE_COLUMN_MAX else 2
+        want = str(self.ov.s.get("results_columns", "auto"))
+        self.cols = int(want) if want in ("1", "2") and n > 1 else (1 if n <= ONE_COLUMN_MAX else 2)
         self.per_col = int(math.ceil(n / float(self.cols))) if n else 0
         self.col_w = COL_W + (PTS_W if any("pts" in e for e in self.entries) else 0)
         self.lw = 2 * PAD + self.cols * self.col_w + (self.cols - 1) * GUTTER
@@ -225,8 +226,11 @@ class ResultsBoard(FramelessMixin, QWidget):
         return QColor(0, 0, 0, 70 if QColor(self.ov.s["bg"]).lightness() < 128 else 22)
 
     def draw_title(self, p, lw, tc, ac):
-        p.fillRect(QRectF(0, 0, lw, TOP_H), self.band())
-        p.fillRect(QRectF(0, TOP_H - 3, lw, 3), ac)
+        style = self.ov.s.get("board_header", "band")
+        if style == "band":
+            p.fillRect(QRectF(0, 0, lw, TOP_H), self.band())
+        if style in ("band", "line"):
+            p.fillRect(QRectF(0, TOP_H - 3, lw, 3), ac)
         if self.icon is not None:
             p.drawPixmap(QRectF(PAD, 8, 38, 38), self.icon, QRectF(self.icon.rect()))
         p.setFont(self.spaced(24, True, 2.5))
@@ -261,10 +265,16 @@ class ResultsBoard(FramelessMixin, QWidget):
 
         row = QPainterPath()
         row.addRoundedRect(QRectF(x, y, self.col_w, rh), 6, 6)
-        bg = QColor(tc)
-        bg.setAlpha(20)
-        p.fillPath(row, bg)
-        if place == 1:
+        style = ov.s.get("results_style", "cards")
+        if style == "cards":
+            bg = QColor(tc)
+            bg.setAlpha(20)
+            p.fillPath(row, bg)
+        elif style == "lines":
+            line = QColor(tc)
+            line.setAlpha(45)
+            p.fillRect(QRectF(x, y + rh + 1.5, self.col_w, 1), line)
+        if place == 1 and ov.s.get("results_winner", True):
             win = QColor(ac)
             win.setAlpha(40)
             p.fillPath(row, win)
@@ -332,7 +342,8 @@ class ResultsBoard(FramelessMixin, QWidget):
                        ent["gap"])
 
     def draw_footer(self, p, lw, lh, ac):
-        p.fillRect(QRectF(0, lh - FOOT_H, lw, FOOT_H), self.band())
+        if self.ov.s.get("board_footer", "band") == "band":
+            p.fillRect(QRectF(0, lh - FOOT_H, lw, FOOT_H), self.band())
         f = self.spaced(15, True, 1.2)
         text = QFontMetrics(f).elidedText((self.footer or "RACE").upper(), Qt.TextElideMode.ElideRight, int(lw - 24))
         p.setFont(f)

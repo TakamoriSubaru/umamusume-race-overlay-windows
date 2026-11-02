@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.14
+
+- **New (Boards tab), results board look:**
+  - **Row style:** cards (as before), lines, or plain.
+  - **Columns:** automatic (two columns above 6 umas), always one, or always two.
+  - **Winner:** switch the accent tint on the winner's row on or off.
+  - **Top strip / Bottom strip (all boards):** the dark strip and accent bar can be simplified. This also applies to the skill luck, standings and match boards.
+- **Save my look / Load a look** (Look tab) now also keeps these.
+- **Note:** everything is as before until you change it.
+
 ## 1.0.13
 
 - **The server files folder is now called `Server Files`.** Releases that include the server put it in a folder with that name next to the program.
