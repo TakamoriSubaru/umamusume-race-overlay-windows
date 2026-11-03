@@ -5,7 +5,7 @@ import os
 import re
 from PyQt6.QtCore import QSize, QTimer, QUrl, Qt
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtGui import QColor, QFont, QIcon
+from PyQt6.QtGui import QColor, QFont, QFontDatabase, QIcon
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
@@ -16,7 +16,6 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
     QFileDialog,
-    QFontComboBox,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -572,18 +571,12 @@ class SettingsDialog(QDialog):
         row.addWidget(self.lbl_size)
         f.addRow("Text size", row)
 
-        row2 = QHBoxLayout()
-        self.cb_deffont = QCheckBox("Default font")
-        self.font_box = QFontComboBox()
-        if s.get("font"):
-            self.font_box.setCurrentFont(QFont(s["font"]))
-        self.cb_deffont.setChecked(not s.get("font"))
-        self.font_box.setEnabled(bool(s.get("font")))
-        self.cb_deffont.toggled.connect(self.on_font)
-        self.font_box.currentFontChanged.connect(self.on_font)
-        row2.addWidget(self.cb_deffont)
-        row2.addWidget(self.font_box, 1)
-        fc.addRow("Font", row2)
+        self.cmb_font = QComboBox()
+        self.cmb_font.setMaxVisibleItems(25)
+        self.fill_fonts(s.get("font", ""))
+        self.cmb_font.activated.connect(self.on_font)
+        self.cmb_font.setToolTip("A short list of common fonts. \"More fonts...\" shows every font on this computer.")
+        fc.addRow("Font", self.cmb_font)
 
         self.cb_arrows = QCheckBox("Show an arrow when a uma gains or loses a place")
         self.cb_arrows.setChecked(bool(s.get("rank_arrows", True)))
@@ -1345,7 +1338,7 @@ class SettingsDialog(QDialog):
         sc = self.scrolled(dt)
         self._draft_tab = sc
         self.update_match_label()
-        tabs.addTab(sc, "Draft")
+        tabs.addTab(sc, "Draft (WIP)")
 
     def pick_team_color(self, i, btn):
         c = QColorDialog.getColor(QColor(self.ov.match.teams[i]["color"]), self, "Team colour")
@@ -1775,10 +1768,36 @@ class SettingsDialog(QDialog):
         self.lbl_size.setText("%d%%" % v)
         self.ov.set_setting("text_scale", v / 100.0)
 
+    COMMON_FONTS = ("Segoe UI", "Arial", "Verdana", "Tahoma", "Trebuchet MS", "Georgia", "Calibri", "Consolas",
+                    "Courier New", "Ubuntu", "Ubuntu Sans", "DejaVu Sans", "Noto Sans", "Roboto", "Open Sans",
+                    "Liberation Sans", "Cantarell", "Inter", "Comic Sans MS", "Impact")
+
+    def fill_fonts(self, current):
+        """The font drop-down: Default, the common fonts this computer has, the current one, More fonts..."""
+        have = {f.lower(): f for f in QFontDatabase.families()}
+        names = [have[n.lower()] for n in self.COMMON_FONTS if n.lower() in have]
+        if current and current.lower() not in [n.lower() for n in names]:
+            names.insert(0, current)
+        self.cmb_font.blockSignals(True)
+        self.cmb_font.clear()
+        self.cmb_font.addItem("Default font", "")
+        for n in names:
+            self.cmb_font.addItem(n, n)
+        self.cmb_font.addItem("More fonts...", "__more__")
+        i = self.cmb_font.findData(current or "")
+        self.cmb_font.setCurrentIndex(max(0, i))
+        self.cmb_font.blockSignals(False)
+
     def on_font(self, *_):
-        use_default = self.cb_deffont.isChecked()
-        self.font_box.setEnabled(not use_default)
-        self.ov.set_setting("font", "" if use_default else self.font_box.currentFont().family())
+        data = self.cmb_font.currentData()
+        if data == "__more__":
+            families = sorted(set(QFontDatabase.families()), key=str.lower)
+            cur = self.ov.s.get("font", "")
+            name, ok = QInputDialog.getItem(self, "More fonts", "Choose a font:", families,
+                                            max(0, families.index(cur)) if cur in families else 0, False)
+            self.fill_fonts(name if ok else cur)
+            data = name if ok else cur
+        self.ov.set_setting("font", data or "")
 
     def reset(self):
         self.ov.reset_settings()
@@ -1790,7 +1809,7 @@ class SettingsDialog(QDialog):
         self.cmb_avatar.setCurrentIndex(0)
         self.sl_op.setValue(int(s["bg_opacity"] * 100))
         self.sl_size.setValue(int(s["text_scale"] * 100))
-        self.cb_deffont.setChecked(True)
+        self.fill_fonts("")
         self.cb_arrows.setChecked(bool(s["rank_arrows"]))
         self.sp_rows.setValue(int(s["max_rows"]))
         self.cmb_style.setCurrentIndex(0)
@@ -1803,7 +1822,7 @@ class SettingsDialog(QDialog):
 
     def show_tab(self, name):
         for i in range(self._tabs.count()):
-            if self._tabs.tabText(i) == name:
+            if self._tabs.tabText(i).replace(" (WIP)", "") == name:
                 self._tabs.setCurrentIndex(i)
                 return
 

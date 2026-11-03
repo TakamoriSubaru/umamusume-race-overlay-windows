@@ -2,6 +2,8 @@
 
 ## 1.0.14
 
+- **Look tab, Font:** a short drop-down of common fonts (the ones your computer has), with *Default font* first and *More fonts...* for the full list. No more scrolling through every font.
+- **Draft tab is now labelled "Draft (WIP)"** (work in progress).
 - **New (Boards tab), results board look:**
   - **Row style:** cards (as before), lines, or plain.
   - **Columns:** automatic (two columns above 6 umas), always one, or always two.
