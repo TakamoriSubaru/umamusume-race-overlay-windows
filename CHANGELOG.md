@@ -2,8 +2,10 @@
 
 ## 1.0.15
 
-- **Alts and special outfits show up by themselves** (for example *Summer Maruzensky*, shown as "Maruzensky (Hot☆Summer Night)"). The program reads the official outfit names from Race Overlay's `umdb.json` (in `Server Files/resources`, or put a copy in your images folder). You no longer have to name them by hand.
-- Names you typed in *People > Outfits* still win. The names the program found are shown there in grey; type over one to use your own.
+- **Alts and special outfits show up by themselves** (for example *Summer Maruzensky*, shown as "Maruzensky (Summer)"). The program reads the official outfit names from Race Overlay's `umdb.json` (in `Server Files/resources`, or put a copy in your images folder). You no longer have to name them by hand.
+- **Short names for event outfits:** Halloween, Summer, Christmas, New Year, Valentine, Wedding, Autumn, Cheerleader (Rice Shower's *Vampire Makeover!* now shows as *Halloween*). Other outfits show the official card name.
+- **The People > Outfits tab is gone**, since the names come by themselves. A name you put in `images/outfits.json` (`"label"`) still wins.
+- **Tower, Boards and Look are now one tab (Look)**, one section after the other, so there is less to hunt for.
 - If `umdb.json` is older than the game and does not know an outfit yet, it still says "Alt" until you update `umdb.json` or name it.
 
 ## 1.0.14

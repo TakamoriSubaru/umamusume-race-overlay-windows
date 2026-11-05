@@ -314,7 +314,6 @@ class OverlayWidget(FramelessMixin, QWidget):
             self.umas.save()
             if self.dialog is not None:
                 self.dialog.refresh_players()
-                self.dialog.refresh_outfits()
                 self.dialog.refresh_umas()
 
         self.course_shape = payload.get("courseShape")

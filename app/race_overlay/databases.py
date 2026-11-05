@@ -131,10 +131,31 @@ class UmasDB:
 # Names of alternative outfits, by race dress id. The default outfit of a uma has the dress id
 # chara id * 100 + 1 (for example 100201 = Silence Suzuka) and is shown with just her name.
 # Everything else is an alternative outfit: shown as "Name (Outfit)". You can name more of them
-# in the People tab (Outfits) (they are saved in images/outfits.json).
+# in images/outfits.json.
 BUILTIN_OUTFITS = {
     105840: "Halloween",      # Meisho Doto
 }
+
+
+THEME_WORDS = (        # a short name for the usual event outfits, found in the official card name
+    ("Halloween", ("halloween", "vampire", "jiangshi", "mummy", "lantern", "pumpkin", "witch", "lunatic")),
+    ("Summer", ("summer", "vacances", "swimsuit")),
+    ("Christmas", ("christmas", "caroler", "santa", "noel")),
+    ("New Year", ("new year",)),
+    ("Valentine", ("valentine", "chocolat")),
+    ("Wedding", ("wedding", "bride", "bridal")),
+    ("Autumn", ("autumn",)),
+    ("Cheerleader", ("cheerleader",)),
+)
+
+
+def short_outfit_name(title):
+    """"Vampire Makeover!" -> "Halloween". Names that are not a known event stay as the card name."""
+    low = title.lower()
+    for short, words in THEME_WORDS:
+        if any(w in low for w in words):
+            return short
+    return title
 
 
 class CardTitles:
@@ -164,7 +185,7 @@ class CardTitles:
         if self.titles is None:
             self.load()
         try:
-            return self.titles.get(int(card_id), "")
+            return short_outfit_name(self.titles.get(int(card_id), ""))
         except (TypeError, ValueError):
             return ""
 
@@ -220,7 +241,7 @@ class OutfitsDB:
         return "%s (%s)" % (name, lab) if lab else name
 
     def touch(self, chara_id, dress_id, uma, card_id=0):
-        """Remember an alternative outfit so it shows up in the People tab (Outfits). True if it is new."""
+        """Remember an alternative outfit so it is saved in outfits.json. True if it is new."""
         if not is_alt_outfit(chara_id, dress_id):
             return False
         key = str(int(dress_id))

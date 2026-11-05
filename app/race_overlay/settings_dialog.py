@@ -40,7 +40,6 @@ from PyQt6.QtWidgets import (
 from .constants import (APP_NAME, APP_VERSION, FROZEN, IS_WINDOWS, LUCK_NAME, MATCH_NAME, PLATFORM, RELEASES_URL, RESULTS_NAME,
                         SCRIPT_DIR, STANDINGS_NAME, STATE_COLORS, THEME_PRESETS)
 from . import logbuf
-from .databases import BUILTIN_OUTFITS
 from .diagnostics import LOG_FILES, read_tail, run_checks
 from .sources import choose_source, count_race_files
 from .setups import SETUPS, current_setup
@@ -811,11 +810,17 @@ class SettingsDialog(QDialog):
             prow.addWidget(b)
         tl.addLayout(prow)
         bv.insertWidget(1, gtime)
-        tabs.addTab(self.scrolled(tower), "Tower")
-        tabs.addTab(self.scrolled(boards), "Boards")
-        tabs.addTab(self.scrolled(look), "Look")
+        one = QWidget()                   # Look, Tower and Boards are one page, one section after the other
+        ol = QVBoxLayout(one)
+        for title, part in (("Look", look), ("Tower (the race window)", tower), ("Boards", boards)):
+            head = QLabel("<b style='font-size:15px'>%s</b>" % title)
+            head.setStyleSheet("padding:10px 0 2px 0; border-bottom:1px solid #3a3a5a;")
+            ol.addWidget(head)
+            ol.addWidget(part)
+        ol.addStretch(1)
+        tabs.addTab(self.scrolled(one), "Look")
 
-        # ---- People tab (Players, Umas, Outfits as inner tabs)
+        # ---- People tab (Players, Umas as inner tabs)
         people = QTabWidget()
         pl = QWidget()
         v = QVBoxLayout(pl)
@@ -886,30 +891,6 @@ class SettingsDialog(QDialog):
         people.addTab(ut, "Umas")
         self._uma_pix_count = -1
 
-        # ---- Outfits tab (names for alternative outfits)
-        ot = QWidget()
-        ov_l = QVBoxLayout(ot)
-        oinfo = QLabel("A uma in her normal outfit is shown with just her name. When a uma wears another outfit, "
-                       "it appears here by itself. Type a name in the <b>Name</b> column (for example "
-                       "<i>Halloween</i>) and the overlay shows <i>Meisho Doto (Halloween)</i>. "
-                       "Until you name it, it shows <i>(Alt)</i>.")
-        oinfo.setWordWrap(True)
-        ov_l.addWidget(oinfo)
-        self.otable = QTableWidget(0, 3)
-        self.otable.setHorizontalHeaderLabels(["Uma", "Outfit id", "Name (double-click to edit)"])
-        self.otable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.otable.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked
-                                    | QAbstractItemView.EditTrigger.EditKeyPressed)
-        self.otable.horizontalHeader().setStretchLastSection(True)
-        self.otable.verticalHeader().setVisible(False)
-        self.otable.setAlternatingRowColors(True)
-        self.otable.setShowGrid(False)
-        self.otable.setColumnWidth(0, 200)
-        self.otable.setColumnWidth(1, 90)
-        self._outfit_busy = False
-        self.otable.itemChanged.connect(self.on_outfit_edited)
-        ov_l.addWidget(self.otable, 1)
-        people.addTab(ot, "Outfits")
         tabs.addTab(people, "People")
 
         self.build_standings_tab(tabs)
@@ -951,7 +932,6 @@ class SettingsDialog(QDialog):
         self._tabs = tabs
         self._status_tab = stt
         tabs.currentChanged.connect(lambda _i: self.refresh_status() if tabs.currentWidget() is stt else None)
-        self.refresh_outfits()
         self.refresh_umas()
 
         self.sync_widgets()
@@ -1873,41 +1853,6 @@ class SettingsDialog(QDialog):
             QMessageBox.information(self, "Pick a trainer", "Click a trainer in the list first.")
             return None
         return it.text()
-
-    def refresh_outfits(self):
-        self._outfit_busy = True
-        rows = self.ov.outfits.rows()
-        self.otable.setRowCount(len(rows))
-        for i, (did, uma, label, auto) in enumerate(rows):
-            shown = label or auto
-            cells = (uma, str(did), shown)
-            for c, text in enumerate(cells):
-                it = QTableWidgetItem(text)
-                if c < 2:
-                    it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                elif not label and auto:
-                    it.setToolTip("Found by the program. Type another name to use your own.")
-                    it.setForeground(QColor("#9aa0b8"))
-                self.otable.setItem(i, c, it)
-        self._outfit_busy = False
-
-    def on_outfit_edited(self, item):
-        if self._outfit_busy or item.column() != 2:
-            return
-        id_item = self.otable.item(item.row(), 1)
-        if id_item is None:
-            return
-        try:
-            did = int(id_item.text())
-        except ValueError:
-            return
-        text = item.text().strip()
-        if text == self.ov.outfits.auto_label(did) and not (self.ov.outfits.data.get(str(did)) or {}).get("label"):
-            return                                     # the name the program found: nothing of yours to save
-        self.ov.outfits.set_label(did, text)
-        for h in self.ov.horses:                       # a race on screen follows the new name at once
-            h.label = self.ov.outfits.display(h.name, h.chara_id, h.dress_id, h.card_id)
-        self.ov.update()
 
     def refresh_players(self):
         keep = None
