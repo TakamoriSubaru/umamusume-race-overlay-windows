@@ -124,7 +124,7 @@ Good to know:
 When the race ends the tower slides out and the results board slides in. It shows every uma in finishing order, with the finish time and the gap to the winner, and the track name at the bottom. Up to 6 umas are shown in one column, more are split into two columns. The window sizes itself to the number of umas; pull its edges to make it bigger or smaller and the size is remembered.
 
 - It is a separate window called **Umamusume Race Results (Windows)**, so you can place it anywhere on the stream, independent of the tower.
-- **Boards section (Look tab):** turn it on or off, choose how long it stays (or *Until the next race*), give it your own **title** (for example *GRAND FINAL*), and choose what each row shows: finish time and gap, time only, or names only. `--hold` keeps it until the next race too.
+- **Look tab, Boards:** turn it on or off, choose how long it stays (or *Until the next race*), give it your own **title** (for example *GRAND FINAL*), and choose what each row shows: finish time and gap, time only, or names only. `--hold` keeps it until the next race too.
 - It uses the same colours, font, picture choice (uma / player / both) and slide direction as the tower. The *Accent colour* is the title line and the track name.
 - **Home tab / tray menu:** *Show results board (to place it)* shows it with sample places, so you can position and style it before any race has been run.
 - Equal finish times share one place. A uma without a finish time shows `--`.
@@ -132,7 +132,7 @@ When the race ends the tower slides out and the results board slides in. It show
 
 ---
 
-**When the boards come in:** in the Boards section of the Look tab, *When the boards come in*. After a race the results board comes in first. The skill luck, match and standings boards each come in either *After the one before* (one at a time, the default) or *Together with the results*, so all boards are on screen at once. Each has extra seconds of waiting time, and *Show all at once* sets them all together. Put every board in its own place in OBS.
+**When the boards come in:** in the Look tab, Boards, *When the boards come in*. After a race the results board comes in first. The skill luck, match and standings boards each come in either *After the one before* (one at a time, the default) or *Together with the results*, so all boards are on screen at once. Each has extra seconds of waiting time, and *Show all at once* sets them all together. Put every board in its own place in OBS.
 
 ---
 
@@ -165,7 +165,7 @@ Use *Show standings board (to place it)* in the Menu to put the window where you
 
 After the results board, an optional **skill luck board** shows the **luckiest** and the **unluckiest** players of the race: how many of the skills a player brought actually activated (for example 13/16), who missed the most, and who hit every skill. In OBS it is its own window: **Umamusume Skill Luck (Windows)**.
 
-Turn it on in the Boards section of the Look tab (*Skill luck board*), choose how many players are listed on each side, how long it stays, and give it your own title. *Show skill luck board (to place it)* in the Home tab or tray menu shows sample data so you can place it first. It needs the list of equipped skills, which **saved race files** contain. Without it the board counts only the skills that activated. The numbers come from the race data the game already wrote, nothing is read from the game.
+Turn it on in the Look tab, Boards (*Skill luck board*), choose how many players are listed on each side, how long it stays, and give it your own title. *Show skill luck board (to place it)* in the Home tab or tray menu shows sample data so you can place it first. It needs the list of equipped skills, which **saved race files** contain. Without it the board counts only the skills that activated. The numbers come from the race data the game already wrote, nothing is read from the game.
 
 ---
 

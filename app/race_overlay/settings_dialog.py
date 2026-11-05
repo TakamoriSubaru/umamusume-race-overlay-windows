@@ -810,15 +810,11 @@ class SettingsDialog(QDialog):
             prow.addWidget(b)
         tl.addLayout(prow)
         bv.insertWidget(1, gtime)
-        one = QWidget()                   # Look, Tower and Boards are one page, one section after the other
-        ol = QVBoxLayout(one)
-        for title, part in (("Look", look), ("Tower (the race window)", tower), ("Boards", boards)):
-            head = QLabel("<b style='font-size:15px'>%s</b>" % title)
-            head.setStyleSheet("padding:10px 0 2px 0; border-bottom:1px solid #3a3a5a;")
-            ol.addWidget(head)
-            ol.addWidget(part)
-        ol.addStretch(1)
-        tabs.addTab(self.scrolled(one), "Look")
+        look_tabs = QTabWidget()          # Look: colours, Tower and Boards as inner tabs (like People)
+        look_tabs.addTab(self.scrolled(look), "Colours and pictures")
+        look_tabs.addTab(self.scrolled(tower), "Tower")
+        look_tabs.addTab(self.scrolled(boards), "Boards")
+        tabs.addTab(look_tabs, "Look")
 
         # ---- People tab (Players, Umas as inner tabs)
         people = QTabWidget()
