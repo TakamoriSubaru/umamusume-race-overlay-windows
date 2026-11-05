@@ -24,6 +24,8 @@ from PyQt6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -570,12 +572,15 @@ class SettingsDialog(QDialog):
         row.addWidget(self.lbl_size)
         f.addRow("Text size", row)
 
+        self.lbl_fontprev = QLabel("Preview:  1st  Inari One  +0.41  12:34.5")
+        self.lbl_fontprev.setStyleSheet("padding:6px 10px; border:1px solid #3a3a5a; border-radius:8px;")
         self.cmb_font = QComboBox()
         self.cmb_font.setMaxVisibleItems(25)
         self.fill_fonts(s.get("font", ""))
         self.cmb_font.activated.connect(self.on_font)
         self.cmb_font.setToolTip("A short list of common fonts. \"More fonts...\" shows every font on this computer.")
         fc.addRow("Font", self.cmb_font)
+        fc.addRow("", self.lbl_fontprev)
 
         self.cb_arrows = QCheckBox("Show an arrow when a uma gains or loses a place")
         self.cb_arrows.setChecked(bool(s.get("rank_arrows", True)))
@@ -1759,21 +1764,76 @@ class SettingsDialog(QDialog):
         self.cmb_font.addItem("Default font", "")
         for n in names:
             self.cmb_font.addItem(n, n)
+            self.cmb_font.setItemData(self.cmb_font.count() - 1, QFont(n, 12), Qt.ItemDataRole.FontRole)   # each name in its own font
         self.cmb_font.addItem("More fonts...", "__more__")
         i = self.cmb_font.findData(current or "")
         self.cmb_font.setCurrentIndex(max(0, i))
         self.cmb_font.blockSignals(False)
+        self.show_font_preview(current)
+
+    def show_font_preview(self, name):
+        f = QFont(name) if name else QFont(QApplication.font())
+        f.setPointSize(14)
+        f.setBold(True)
+        self.lbl_fontprev.setFont(f)
+
+    def pick_font(self, current):
+        """Every font on this computer: type to search, each name is drawn in its own font, with a preview."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle("More fonts")
+        dlg.resize(420, 520)
+        v = QVBoxLayout(dlg)
+        search = QLineEdit()
+        search.setPlaceholderText("Type to search...")
+        lst = QListWidget()
+        prev = QLabel("1st  Inari One  +0.41  12:34.5")
+        prev.setMinimumHeight(44)
+        prev.setStyleSheet("padding:6px 10px; border:1px solid #3a3a5a; border-radius:8px;")
+        for fam in sorted(set(QFontDatabase.families()), key=str.lower):
+            it = QListWidgetItem(fam)
+            it.setFont(QFont(fam, 12))
+            lst.addItem(it)
+            if fam == current:
+                lst.setCurrentItem(it)
+
+        def show(it, *_):
+            if it is not None:
+                pf = QFont(it.text())
+                pf.setPointSize(16)
+                pf.setBold(True)
+                prev.setFont(pf)
+
+        def narrow(text):
+            for i in range(lst.count()):
+                lst.item(i).setHidden(text.lower() not in lst.item(i).text().lower())
+
+        lst.currentItemChanged.connect(show)
+        lst.itemDoubleClicked.connect(lambda *_: dlg.accept())
+        search.textChanged.connect(narrow)
+        show(lst.currentItem())
+        row = QHBoxLayout()
+        ok, cancel = QPushButton("Use this font"), QPushButton("Cancel")
+        ok.clicked.connect(dlg.accept)
+        cancel.clicked.connect(dlg.reject)
+        row.addStretch(1)
+        row.addWidget(cancel)
+        row.addWidget(ok)
+        for w in (search, lst, prev):
+            v.addWidget(w, 1 if w is lst else 0)
+        v.addLayout(row)
+        if dlg.exec() and lst.currentItem() is not None:
+            return lst.currentItem().text()
+        return None
 
     def on_font(self, *_):
         data = self.cmb_font.currentData()
         if data == "__more__":
-            families = sorted(set(QFontDatabase.families()), key=str.lower)
             cur = self.ov.s.get("font", "")
-            name, ok = QInputDialog.getItem(self, "More fonts", "Choose a font:", families,
-                                            max(0, families.index(cur)) if cur in families else 0, False)
-            self.fill_fonts(name if ok else cur)
-            data = name if ok else cur
+            name = self.pick_font(cur)
+            data = name or cur
+            self.fill_fonts(data)
         self.ov.set_setting("font", data or "")
+        self.show_font_preview(data or "")
 
     def reset(self):
         self.ov.reset_settings()
@@ -1988,7 +2048,7 @@ class SettingsDialog(QDialog):
             own = ov.uma_own_picture(card)
             shown = "mine: " + os.path.basename(own) if own else ("default" if ov.thumbs.use_default else "(none)")
             self.utable.setItem(i, 0, face)
-            for c, text in enumerate((name, str(card), shown), start=1):
+            for c, text in enumerate((ov.uma_full_name(card, chara, name), str(card), shown), start=1):
                 self.utable.setItem(i, c, QTableWidgetItem(text))
             if str(card) == keep:
                 self.utable.selectRow(i)

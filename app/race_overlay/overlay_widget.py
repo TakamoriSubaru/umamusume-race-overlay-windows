@@ -324,6 +324,12 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.fit_to_rows()
         self.update()
 
+    def uma_full_name(self, card, chara, name):
+        """"Inari One" for her normal outfit, "Inari One Festival" for another one (so two cards never look the same)."""
+        if not card or not chara or int(card) == int(chara) * 100 + 1:
+            return name
+        return "%s %s" % (name, self.outfits.auto_label(0, card) or "Alt")
+
     def umdb_paths(self):
         """Where Race Overlay's umdb.json (official outfit names) may be: your images folder, then the server folder."""
         paths = [os.path.join(self.images_dir, "umdb.json")]

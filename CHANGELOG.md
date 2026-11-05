@@ -6,6 +6,8 @@
 - **Short names for event outfits:** Halloween, Summer, Christmas, New Year, Valentine, Wedding, Autumn, Cheerleader (Rice Shower's *Vampire Makeover!* now shows as *Halloween*). Other outfits show the official card name.
 - **The People > Outfits tab is gone**, since the names come by themselves. A name you put in `images/outfits.json` (`"label"`) still wins.
 - **Tower, Boards and Look are now one tab (Look)**, with *Colours and pictures*, *Tower* and *Boards* inside it (the same way as People).
+- **People > Umas:** two outfits of one uma no longer look the same: *Inari One* and *Inari One Golden Dream* (short names such as *Festival* or *Summer* when the program knows them).
+- **Font:** each name in the drop-down is drawn in its own font, there is a live preview line under it, and *More fonts...* is a window with search and a preview.
 - If `umdb.json` is older than the game and does not know an outfit yet, it still says "Alt" until you update `umdb.json` or name it.
 
 ## 1.0.14
