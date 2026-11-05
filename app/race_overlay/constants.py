@@ -107,11 +107,15 @@ DEFAULT_SETTINGS = {
     "show_overlay": False,     # is the overlay window shown? (remembered between starts)
     "stop_server": True,       # quitting the overlay also closes the Race Overlay server the start script started
     "open_menu": True,         # open the Menu window when the program starts
+    "auto_update_check": True,   # tell me (a window) when a new version is out; checked when the program starts
+    "update_skip": "",           # a version number you chose "Skip this version" for
     "update_url": "https://github.com/TakamoriSubaru/umamusume-race-overlay-windows/releases/latest/download/latest.json",  # "Check online" link
     "default_faces": True,     # use the faces found in Race Overlay when you have not chosen a picture
     "row_gate": True,          # tower row: the gate number badge (full tower)
     "row_style": True,         # tower row: the running style badge F / P / L / E (full tower)
     "row_gap": "both",         # tower row: "both" (seconds and length), "time", "length" or "none"
+    "header_scale": 1.0,       # size of the tower header (track info + clock) on its own, 1.0 = normal
+    "header_clock": "auto",    # "auto" = lower line only when the track info does not fit, "right" = next to the track info, "below" = on the lower line
     "tower_header": "both",    # "both" = track info and clock, "clock" = clock only, "none"
     "players_only": False,     # tower: hide umas that have no trainer name (NPCs)
     "strip_tags": False,       # names: "CLUB｜Name" shows as "Name"
@@ -202,7 +206,7 @@ DEFAULT_SETTINGS = {
 
 
 KEEP_ON_RESET = ("source", "saved_races_dir", "watch_subfolders", "start_delay", "auto_hide",
-                 "update_url", "open_menu", "stop_server", "show_overlay", "results_board", "results_seconds", "default_faces",
+                 "update_url", "auto_update_check", "update_skip", "open_menu", "stop_server", "show_overlay", "results_board", "results_seconds", "default_faces",
                  "scoring", "standings_board", "standings_mode", "standings_sheet", "standings_tab",
                  "standings_name_col", "standings_score_col", "standings_uma_col", "standings_first_row",
                  "standings_view", "standings_round_blocks", "standings_total_cols", "standings_border_values",
@@ -234,7 +238,7 @@ THEME_PRESETS = {
 
 # the settings that make up "my look" (Save my look / Load a look in the Look tab)
 LOOK_KEYS = ("bg", "bg_opacity", "text_color", "sub_color", "accent", "text_scale", "font",
-             "podium_1", "podium_2", "podium_3", "picture_shape", "row_style", "pictures", "names",
+             "header_scale", "header_clock", "podium_1", "podium_2", "podium_3", "picture_shape", "row_style", "pictures", "names",
              "board_header", "board_footer", "results_style", "results_columns", "results_winner")
 
 

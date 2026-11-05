@@ -1,7 +1,12 @@
 # Changelog
 
-## 1.0.15
+## 2.0.0
 
+A big update, so the version number jumps to 2.0.0.
+
+- **The program tells you when there is a new version, and updates itself.** A few seconds after it starts it looks on GitHub; if there is a newer version a window asks *Update now / Later / Skip this version*. *Update now* downloads a small zip (without the server files), replaces the files, and starts the program again. Your settings, pictures and the Server Files folder are not touched. Turn it off in Home > More > *Tell me when a new version is out*.
+- **Uma pictures in other outfits:** a picture named after the uma (or her character id) is her normal outfit and is no longer shown for Halloween, Summer and so on. Those outfits use their own picture (images/uma, Race Overlay's character_thumbs, or the server).
+- **The tower header fits big text:** a long track name gets smaller instead of being cut, and the clock moves to the lower line by itself when the track info does not fit (Look > Tower > Clock: *Automatic*, or choose *Next to the track info* / *On the lower line*; *Header size* changes the whole header). Thanks Phedro for the idea.
 - **Alts and special outfits show up by themselves** (for example *Summer Maruzensky*, shown as "Maruzensky (Summer)"). The program reads the official outfit names from Race Overlay's `umdb.json` (in `Server Files/resources`, or put a copy in your images folder). You no longer have to name them by hand.
 - **Short names for event outfits:** Halloween, Summer, Christmas, New Year, Valentine, Wedding, Autumn, Cheerleader (Rice Shower's *Vampire Makeover!* now shows as *Halloween*). Other outfits show the official card name.
 - **The People > Outfits tab is gone**, since the names come by themselves. A name you put in `images/outfits.json` (`"label"`) still wins.

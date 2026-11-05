@@ -147,7 +147,10 @@ class ImageStore(QThread):
 
     def _uma(self, spec):
         card, chara, name = spec.get("card_id", 0), spec.get("chara_id", 0), spec.get("name", "")
-        for stem in (str(card), str(chara), name):
+        # Another outfit only takes a picture made for that card. A picture named after the uma or her
+        # character id is her normal outfit, so it must not stand in for Halloween, Summer, ...
+        alt = bool(card and chara and card != chara * 100 + 1)
+        for stem in ((str(card),) if alt else (str(card), str(chara), name)):
             if stem and stem != "0":
                 path = find_file_ci(self.uma, stem)
                 if path:
@@ -206,6 +209,66 @@ def _merge_json(old_bytes, new_bytes):
     return new_bytes
 
 
+def _import_player_pack(z, records_name, images_dir):
+    """A zip with pfp_records.json (discord id -> in-game name) and <discord id>.png pictures:
+    each picture becomes the picture of that trainer. Returns how many trainers got a picture."""
+    try:
+        records = json.loads(z.read(records_name).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, KeyError):
+        raise ValueError("pfp_records.json could not be read.")
+    if not isinstance(records, dict):
+        raise ValueError("pfp_records.json has an unexpected format.")
+    folder = records_name.rsplit("/", 1)[0] + "/" if "/" in records_name else ""
+    names = {i.filename: i for i in z.infolist() if not i.is_dir()}
+    players_dir = os.path.join(images_dir, "players")
+    os.makedirs(players_dir, exist_ok=True)
+    db_path = os.path.join(images_dir, "players.json")
+    try:
+        with open(db_path, "r", encoding="utf-8") as f:
+            db = json.load(f)
+        if not isinstance(db, dict):
+            db = {}
+    except Exception:
+        db = {}
+    low = {k.strip().lower(): k for k in db}
+    n = 0
+    for did, rec in records.items():
+        if not isinstance(rec, dict):
+            continue
+        src = None
+        for ext in sorted(IMG_EXTS):
+            src = names.get("%s%s%s" % (folder, did, ext))
+            if src:
+                break
+        if src is None:
+            continue
+        data = z.read(src)
+        ext = os.path.splitext(src.filename)[1].lower()
+        wanted = []
+        for key in (rec.get("in_game_name"), rec.get("display_name")):      # the name seen in the race, and the Discord name
+            key = (key or "").strip()
+            if key and key.lower() not in [w.lower() for w in wanted]:
+                wanted.append(key)
+        if not wanted:
+            continue
+        safe = "".join(c if c not in '/\\:*?"<>|' else "_" for c in wanted[0]).strip() or str(did)
+        with open(os.path.join(players_dir, safe + ext), "wb") as f:
+            f.write(data)
+        for key in wanted:
+            k = low.get(key.lower(), key)
+            e = db.setdefault(k, {"image": "", "seen": 0, "last_uma": "", "last_seen": ""})
+            e["image"] = "players/" + safe + ext
+            if rec.get("club_name"):
+                e["club"] = rec["club_name"]
+            low[key.lower()] = k
+        n += 1
+    tmp = db_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(db, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, db_path)
+    return n
+
+
 def import_pictures(zip_path, images_dir):
     """Copy the pictures of a zip made by export_pictures() (or a zip of an 'images' folder) into images_dir.
     Only pictures and the picture lists are taken, nothing outside images_dir is ever written.
@@ -215,6 +278,9 @@ def import_pictures(zip_path, images_dir):
     with zipfile.ZipFile(zip_path) as z:
         if sum(i.file_size for i in z.infolist()) > MAX_PACK_BYTES:
             raise ValueError("The zip is too big to be a picture pack.")
+        for info in z.infolist():                       # a list of player pictures made from Discord
+            if info.filename.replace("\\", "/").rsplit("/", 1)[-1] == "pfp_records.json" and ".." not in info.filename:
+                return _import_player_pack(z, info.filename, images_dir)
         for info in z.infolist():
             if info.is_dir():
                 continue
@@ -226,6 +292,9 @@ def import_pictures(zip_path, images_dir):
             if len(parts) == 2 and parts[0] in ("players", "uma") \
                     and os.path.splitext(parts[1])[1].lower() in IMG_EXTS:
                 dest = os.path.join(images_dir, parts[0], parts[1])
+                n += 1
+            elif parts[-1].startswith("chara_stand_") and os.path.splitext(parts[-1])[1].lower() in IMG_EXTS:
+                dest = os.path.join(images_dir, "uma", parts[-1])      # Race Overlay's character_thumbs (every outfit)
                 n += 1
             elif len(parts) == 1 and parts[0] in PACK_JSON:
                 dest = os.path.join(images_dir, parts[0])

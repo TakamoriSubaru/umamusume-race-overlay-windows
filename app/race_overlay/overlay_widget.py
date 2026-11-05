@@ -50,6 +50,7 @@ from .match import Match
 from .match_board import MatchBoard
 from .standings_board import StandingsBoard
 from .tray import make_tray_icon
+from .autoupdate import AutoUpdate
 from .updater import restart_program
 from .util import fmt_time, install_exit_hooks, open_folder, stop_started_server
 
@@ -154,6 +155,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         extra = [os.path.expanduser(args.thumbs_dir)] if args.thumbs_dir else []
         extra += find_wine_thumb_dirs(self.s.get("race_overlay_dir", ""))
         self.thumbs = ImageStore(self.base, images_dir, extra)
+        self.autoupdate = AutoUpdate(self)
         self.images_dir = images_dir
         self.players = PlayersDB(os.path.join(images_dir, "players.json"))
         self.outfits = OutfitsDB(os.path.join(images_dir, "outfits.json"))
@@ -192,13 +194,24 @@ class OverlayWidget(FramelessMixin, QWidget):
         return COMPACT_W if self.compact() else BASE_W
 
     @property
-    def hh(self):
+    def hh_base(self):
+        """The header height at normal size."""
         mode = self.s.get("tower_header", "both")
         if mode == "none":
             return 0
         if mode == "clock":
             return CLOCK_HEADER_H
         return COMPACT_HEADER_H if self.compact() else HEADER_H
+
+    def header_k(self):
+        try:
+            return min(2.0, max(0.6, float(self.s.get("header_scale", 1.0))))
+        except (TypeError, ValueError):
+            return 1.0
+
+    @property
+    def hh(self):
+        return int(round(self.hh_base * self.header_k()))
 
     @property
     def rh(self):
@@ -229,6 +242,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self._signal_tick = QTimer(self)             # lets Python see Ctrl+C while Qt is running
         self._signal_tick.start(500)
         self._signal_tick.timeout.connect(lambda: None)
+        self.autoupdate.start()                      # a few seconds later: is there a new version?
         source.offset = float(self.cfg.get("sync_offset", 0.0))
         source.delay = float(self.s.get("start_delay", 12.0))
         source.start()
@@ -689,6 +703,7 @@ class OverlayWidget(FramelessMixin, QWidget):
 
     def draw_header_compact(self, p, lw):
         """One short header: the place on the left, the race clock on the right."""
+        hh = self.hh_base
         tc, sc = QColor(self.s["text_color"]), QColor(self.s["sub_color"])
         line1, _line2 = self.course_lines(self.course_info)
         cw = int(lw - 76)
@@ -701,30 +716,59 @@ class OverlayWidget(FramelessMixin, QWidget):
         p.setFont(self.fnt(15, True, mono=True)); p.setPen(tc)
         p.drawText(QRectF(lw - 70, 4, 62, 26), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, self.clock_text)
         p.setPen(QPen(QColor(255, 255, 255, 30), 1))
-        p.drawLine(QPointF(0, self.hh - 1), QPointF(lw, self.hh - 1))
+        p.drawLine(QPointF(0, hh - 1), QPointF(lw, hh - 1))
 
     def draw_header_clock(self, p, lw):
         """The header with only the race clock (Tower tab, Header)."""
+        hh = self.hh_base
         tc = QColor(self.s["text_color"])
         p.setFont(self.fnt(15 if self.compact() else 20, True, mono=True)); p.setPen(tc)
-        p.drawText(QRectF(8, 0, lw - 16, self.hh), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+        p.drawText(QRectF(8, 0, lw - 16, hh), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                    self.clock_text)
         p.setPen(QPen(QColor(255, 255, 255, 30), 1))
-        p.drawLine(QPointF(0, self.hh - 1), QPointF(lw, self.hh - 1))
+        p.drawLine(QPointF(0, hh - 1), QPointF(lw, hh - 1))
 
     def draw_header(self, p, lw):
         mode = self.s.get("tower_header", "both")
         if mode == "none":
             return
+        k = self.header_k()                 # "Header size": the header is drawn bigger or smaller as one piece
+        p.save()
+        p.scale(k, k)
+        try:
+            self.draw_header_scaled(p, lw / k, mode)
+        finally:
+            p.restore()
+
+    def fit_font(self, font, text, width, lowest=0.6):
+        """The same font, made smaller (down to `lowest`) until the text fits the width."""
+        f = QFont(font)
+        px = f.pixelSize()
+        if px <= 0:
+            return f
+        low = max(5, int(px * lowest))
+        while px > low and QFontMetrics(f).horizontalAdvance(text) > width:
+            px -= 1
+            f.setPixelSize(px)
+        return f
+
+    def draw_header_scaled(self, p, lw, mode):
         if mode == "clock":
             return self.draw_header_clock(p, lw)
         if self.compact():
             return self.draw_header_compact(p, lw)
+        hh = self.hh_base
         tc, sc = QColor(self.s["text_color"]), QColor(self.s["sub_color"])
         line1, line2 = self.course_lines(self.course_info)
+        place = self.s.get("header_clock", "auto")
+        below = place == "below"
+        if place == "auto":                 # the clock goes lower only when the track info cannot fit next to it
+            narrow = self.fit_font(self.fnt(12, True), line1, int(lw - 115), 0.75)
+            below = QFontMetrics(narrow).horizontalAdvance(line1) > int(lw - 115)
 
-        cw = int(lw - 115)   # room left of the clock
+        cw = int(lw - 20) if below else int(lw - 115)   # room left of the clock (all the width when the clock is lower)
         f1, f2 = self.fnt(12, True), self.fnt(10)
+        f1, f2 = self.fit_font(f1, line1, cw), self.fit_font(f2, line2, cw)     # a long track name gets smaller, not cut
         p.setFont(f1); p.setPen(tc)
         p.drawText(QRectF(10, 7, cw, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                    QFontMetrics(f1).elidedText(line1, Qt.TextElideMode.ElideRight, cw))
@@ -732,13 +776,21 @@ class OverlayWidget(FramelessMixin, QWidget):
         p.drawText(QRectF(10, 23, cw, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                    QFontMetrics(f2).elidedText(line2, Qt.TextElideMode.ElideRight, cw))
 
-        p.setFont(self.fnt(20, True, mono=True)); p.setPen(tc)
-        p.drawText(QRectF(lw - 110, 6, 100, 28), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, self.clock_text)
+        if below:                           # the clock shares the lower line with the terrain text
+            p.setFont(self.fnt(18, True, mono=True)); p.setPen(tc)
+            p.drawText(QRectF(lw - 100, 40, 90, 24), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, self.clock_text)
+            tw = int(lw - 120)
+        else:
+            p.setFont(self.fnt(20, True, mono=True)); p.setPen(tc)
+            p.drawText(QRectF(lw - 110, 6, 100, 28), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, self.clock_text)
+            tw = int(lw - 20)
 
-        p.setFont(self.fnt(10, True)); p.setPen(sc)
-        p.drawText(QRectF(10, 44, lw - 20, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.terrain_text)
+        f3 = self.fit_font(self.fnt(10, True), self.terrain_text, tw)
+        p.setFont(f3); p.setPen(sc)
+        p.drawText(QRectF(10, 44, tw, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                   QFontMetrics(f3).elidedText(self.terrain_text, Qt.TextElideMode.ElideRight, tw))
         p.setPen(QPen(QColor(255, 255, 255, 30), 1))
-        p.drawLine(QPointF(0, self.hh - 1), QPointF(lw, self.hh - 1))
+        p.drawLine(QPointF(0, hh - 1), QPointF(lw, hh - 1))
 
     def podium(self, i):
         """Colour of place i (0 = first) on the podium, from the Look tab."""
@@ -1207,7 +1259,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             self.fit_to_rows()
             if key == "tower_style":
                 self.refit_rows_now()
-        if key in ("max_rows", "tower_header", "players_only"):
+        if key in ("max_rows", "tower_header", "players_only", "header_scale"):
             self.fit_to_rows()
         if key == "start_delay" and getattr(self, "source", None) is not None:
             self.source.delay = float(value)

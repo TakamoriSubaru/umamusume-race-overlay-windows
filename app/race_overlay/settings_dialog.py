@@ -228,6 +228,11 @@ class SettingsDialog(QDialog):
         self.cb_server.toggled.connect(lambda on: ov.set_setting("stop_server", on))
         self.cb_server.setToolTip("Only the server that this program (or the start script) started is closed.")
         mm.addWidget(self.cb_server)
+        self.cb_autoupd = QCheckBox("Tell me when a new version is out")
+        self.cb_autoupd.setChecked(bool(ov.s.get("auto_update_check", True)))
+        self.cb_autoupd.toggled.connect(lambda on: ov.set_setting("auto_update_check", on))
+        self.cb_autoupd.setToolTip("Looks on GitHub a few seconds after the program starts (and every 6 hours). If there is a new version a window asks if you want it; you choose.")
+        mm.addWidget(self.cb_autoupd)
 
         if IS_WINDOWS:
             rbx = QGroupBox("Race Overlay (live race data)")
@@ -654,6 +659,20 @@ class SettingsDialog(QDialog):
         self.cmb_header = combo("tower_header", [("both", "Track info and clock"), ("clock", "Clock only"),
                                                  ("none", "No header")])
         fg.addRow("Header", self.cmb_header)
+        hrow = QHBoxLayout()
+        self.sl_hsize = QSlider(Qt.Orientation.Horizontal)
+        self.sl_hsize.setRange(60, 160)
+        self.sl_hsize.setValue(int(float(s.get("header_scale", 1.0)) * 100))
+        self.lbl_hsize = QLabel("%d%%" % self.sl_hsize.value())
+        self.sl_hsize.valueChanged.connect(self.on_header_size)
+        hrow.addWidget(self.sl_hsize)
+        hrow.addWidget(self.lbl_hsize)
+        fg.addRow("Header size", hrow)
+        self.cmb_hclock = combo("header_clock", [("auto", "Automatic (lower when the track info does not fit)"),
+                                                 ("right", "Next to the track info"),
+                                                 ("below", "On the lower line (more room for the track info)")],
+                                "When a big header text does not fit, put the clock lower so the track info can be wider.")
+        fg.addRow("Clock", self.cmb_hclock)
         self.cmb_gap = combo("row_gap", [("both", "Seconds and length"), ("time", "Seconds only"),
                                          ("length", "Length only"), ("none", "No gap")],
                              "The gap to the uma ahead, on the right of every row.")
@@ -1651,6 +1670,9 @@ class SettingsDialog(QDialog):
         if not self.pending:
             return
         m = self.pending
+        if FROZEN:                      # the packaged program updates itself with a helper
+            self.ov.autoupdate.install(m)
+            return
         self.btn_install.setEnabled(False)
         self.lbl_update.setText("Downloading...")
 
@@ -1744,6 +1766,10 @@ class SettingsDialog(QDialog):
             if ok:
                 self.ov.set_setting(k, v)
         self.ov.rebuild_settings("Look")
+
+    def on_header_size(self, v):
+        self.lbl_hsize.setText("%d%%" % v)
+        self.ov.set_setting("header_scale", v / 100.0)
 
     def on_size(self, v):
         self.lbl_size.setText("%d%%" % v)

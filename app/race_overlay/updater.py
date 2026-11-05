@@ -135,10 +135,11 @@ def fetch_manifest(url):
 
 
 def download_update(manifest):
-    if manifest.get("zip"):
-        if not url_allowed(manifest["zip"]):
+    link = manifest.get("update_zip") or manifest.get("zip")      # the small zip without the server files, when there is one
+    if link:
+        if not url_allowed(link):
             raise ValueError("The zip link must start with https://")
-        return files_from_zip(http_get(manifest["zip"], timeout=60))
+        return files_from_zip(http_get(link, timeout=300))
     files = {}
     for name, url in (manifest.get("files") or {}).items():
         key = update_key(name)

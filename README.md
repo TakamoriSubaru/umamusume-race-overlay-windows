@@ -53,7 +53,7 @@ Settings, scores and the team match are saved in `%APPDATA%\race-overlay-native`
 
 ## ⬆️ Updating
 
-The packaged program cannot replace its own files. To update: download the new zip and unzip it. Settings and pictures are kept in `%APPDATA%`, so nothing is lost. *Check online* in the Home tab (More) tells you when a new version exists.
+**The program updates itself.** A few seconds after it starts it looks for a new version; if there is one a window asks *Update now / Later / Skip this version*. *Update now* downloads the new files, closes the program, replaces them and starts it again (your settings and pictures are kept in `%APPDATA%`, and the `Server Files` folder is not touched). You can turn this off in the Home tab (More). If it ever fails, download the newest zip from the Releases page and unzip it over the old folder.
 
 ## 🧰 Command line options
 
