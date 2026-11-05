@@ -1878,13 +1878,16 @@ class SettingsDialog(QDialog):
         self._outfit_busy = True
         rows = self.ov.outfits.rows()
         self.otable.setRowCount(len(rows))
-        for i, (did, uma, label) in enumerate(rows):
-            shown = label or BUILTIN_OUTFITS.get(did, "")
+        for i, (did, uma, label, auto) in enumerate(rows):
+            shown = label or auto
             cells = (uma, str(did), shown)
             for c, text in enumerate(cells):
                 it = QTableWidgetItem(text)
                 if c < 2:
                     it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                elif not label and auto:
+                    it.setToolTip("Found by the program. Type another name to use your own.")
+                    it.setForeground(QColor("#9aa0b8"))
                 self.otable.setItem(i, c, it)
         self._outfit_busy = False
 
@@ -1898,9 +1901,12 @@ class SettingsDialog(QDialog):
             did = int(id_item.text())
         except ValueError:
             return
-        self.ov.outfits.set_label(did, item.text())
+        text = item.text().strip()
+        if text == self.ov.outfits.auto_label(did) and not (self.ov.outfits.data.get(str(did)) or {}).get("label"):
+            return                                     # the name the program found: nothing of yours to save
+        self.ov.outfits.set_label(did, text)
         for h in self.ov.horses:                       # a race on screen follows the new name at once
-            h.label = self.ov.outfits.display(h.name, h.chara_id, h.dress_id)
+            h.label = self.ov.outfits.display(h.name, h.chara_id, h.dress_id, h.card_id)
         self.ov.update()
 
     def refresh_players(self):

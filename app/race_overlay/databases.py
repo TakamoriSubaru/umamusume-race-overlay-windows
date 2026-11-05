@@ -137,6 +137,38 @@ BUILTIN_OUTFITS = {
 }
 
 
+class CardTitles:
+    """Official names of the outfit cards, read from Race Overlay's umdb.json (resources folder), for example
+    card 100402 = "Hot☆Summer Night". It is only read when it is needed, and may be missing."""
+
+    def __init__(self, paths_fn):
+        self.paths_fn = paths_fn        # returns the places to look, best first
+        self.titles = None
+        self.source = ""
+
+    def load(self):
+        self.titles = {}
+        for path in self.paths_fn():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                cards = d.get("card") or []
+                self.titles = {int(c["id"]): str(c.get("name", "")).strip().strip("[]").strip()
+                               for c in cards if isinstance(c, dict) and "id" in c}
+                self.source = path
+                break
+            except Exception:
+                continue
+
+    def title(self, card_id):
+        if self.titles is None:
+            self.load()
+        try:
+            return self.titles.get(int(card_id), "")
+        except (TypeError, ValueError):
+            return ""
+
+
 def is_alt_outfit(chara_id, dress_id):
     return bool(chara_id and dress_id and int(dress_id) != int(chara_id) * 100 + 1)
 
@@ -146,7 +178,8 @@ class OutfitsDB:
 
     def __init__(self, path):
         self.path = path
-        self.data = {}          # "105840" -> {"uma": "Meisho Doto", "label": "Halloween"}
+        self.data = {}          # "105840" -> {"uma": "Meisho Doto", "label": "Halloween", "card": 105802}
+        self.titles = None      # CardTitles: the official outfit names, when umdb.json is found
         try:
             with open(path, "r", encoding="utf-8") as f:
                 d = json.load(f)
@@ -165,26 +198,38 @@ class OutfitsDB:
         except Exception as e:
             print("could not save outfits.json:", e)
 
-    def label_for(self, chara_id, dress_id):
-        """"" for the default outfit, otherwise the outfit name ("Alt" while it has no name yet)."""
+    def auto_label(self, dress_id, card_id=0):
+        """The name the program finds by itself: a built-in short name, else the official card name."""
+        if not card_id:
+            card_id = (self.data.get(str(int(dress_id))) or {}).get("card", 0)
+        auto = BUILTIN_OUTFITS.get(int(dress_id), "")
+        if not auto and self.titles is not None and card_id:
+            auto = self.titles.title(card_id)
+        return auto
+
+    def label_for(self, chara_id, dress_id, card_id=0):
+        """"" for the default outfit, otherwise the outfit name: yours, else the official one,
+        else "Alt" when nothing is known."""
         if not is_alt_outfit(chara_id, dress_id):
             return ""
         mine = (self.data.get(str(int(dress_id))) or {}).get("label", "").strip()
-        return mine or BUILTIN_OUTFITS.get(int(dress_id), "") or "Alt"
+        return mine or self.auto_label(dress_id, card_id) or "Alt"
 
-    def display(self, name, chara_id, dress_id):
-        lab = self.label_for(chara_id, dress_id)
+    def display(self, name, chara_id, dress_id, card_id=0):
+        lab = self.label_for(chara_id, dress_id, card_id)
         return "%s (%s)" % (name, lab) if lab else name
 
-    def touch(self, chara_id, dress_id, uma):
+    def touch(self, chara_id, dress_id, uma, card_id=0):
         """Remember an alternative outfit so it shows up in the People tab (Outfits). True if it is new."""
         if not is_alt_outfit(chara_id, dress_id):
             return False
         key = str(int(dress_id))
         if key in self.data:
             self.data[key]["uma"] = uma
+            if card_id:
+                self.data[key]["card"] = int(card_id)
             return False
-        self.data[key] = {"uma": uma, "label": ""}
+        self.data[key] = {"uma": uma, "label": "", "card": int(card_id or 0)}
         return True
 
     def set_label(self, dress_id, label):
@@ -199,5 +244,5 @@ class OutfitsDB:
                 did = int(k)
             except ValueError:
                 continue
-            out.append((did, v.get("uma", ""), v.get("label", "")))
+            out.append((did, v.get("uma", ""), v.get("label", ""), self.auto_label(did)))
         return sorted(out, key=lambda r: (r[1].lower(), r[0]))

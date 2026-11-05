@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.15
+
+- **Alts and special outfits show up by themselves** (for example *Summer Maruzensky*, shown as "Maruzensky (Hot☆Summer Night)"). The program reads the official outfit names from Race Overlay's `umdb.json` (in `Server Files/resources`, or put a copy in your images folder). You no longer have to name them by hand.
+- Names you typed in *People > Outfits* still win. The names the program found are shown there in grey; type over one to use your own.
+- If `umdb.json` is older than the game and does not know an outfit yet, it still says "Alt" until you update `umdb.json` or name it.
+
 ## 1.0.14
 
 - **Look tab, Font:** a short drop-down of common fonts (the ones your computer has), with *Default font* first and *More fonts...* for the full list. No more scrolling through every font.

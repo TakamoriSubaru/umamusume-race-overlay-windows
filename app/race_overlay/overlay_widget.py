@@ -35,7 +35,7 @@ from .constants import (
     WAKU_COLORS,
     WAKU_DARK,
 )
-from .databases import UmasDB, OutfitsDB, PlayersDB
+from .databases import CardTitles, UmasDB, OutfitsDB, PlayersDB
 from .frameless import FramelessMixin, fit_window
 from .images import ImageStore, find_file_ci, find_wine_thumb_dirs
 from .results_board import ResultsBoard
@@ -157,6 +157,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.images_dir = images_dir
         self.players = PlayersDB(os.path.join(images_dir, "players.json"))
         self.outfits = OutfitsDB(os.path.join(images_dir, "outfits.json"))
+        self.outfits.titles = CardTitles(self.umdb_paths)
         self.umas = UmasDB(os.path.join(images_dir, "umas.json"))
         self.thumbs.use_default = bool(self.s.get("default_faces", True))
         self.thumbs.loaded.connect(self.on_thumb)
@@ -304,7 +305,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             self.players.save()
             new_outfit = False
             for h in self.horses:         # ... and every alternative outfit, so you can name it
-                new_outfit |= self.outfits.touch(h.chara_id, h.dress_id, h.name)
+                new_outfit |= self.outfits.touch(h.chara_id, h.dress_id, h.name, h.card_id)
             if new_outfit:
                 self.outfits.save()
             new_uma = False
@@ -324,6 +325,18 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.fit_to_rows()
         self.update()
 
+    def umdb_paths(self):
+        """Where Race Overlay's umdb.json (official outfit names) may be: your images folder, then the server folder."""
+        paths = [os.path.join(self.images_dir, "umdb.json")]
+        try:
+            from .diagnostics import find_race_overlay
+            folder = find_race_overlay(self.s.get("race_overlay_dir", ""))
+            if folder:
+                paths.append(os.path.join(folder, "resources", "umdb.json"))
+        except Exception:
+            pass
+        return paths
+
     def build_horses(self, payload, rmap):
         """One Horse per runner, with the picture keys set and the pictures requested."""
         by_chara = {h.get("chara_id"): h for h in rmap.values() if h.get("chara_id")}
@@ -336,7 +349,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             chara = rm.get("chara_id") or h.chara_id
             h.chara_id = chara
             h.card_id = rm.get("card_id") or (chara * 100 + 1 if chara else 0)
-            h.label = self.outfits.display(h.name, h.chara_id, h.dress_id)
+            h.label = self.outfits.display(h.name, h.chara_id, h.dress_id, h.card_id)
             base = h.chara_id * 100 + 1 if h.chara_id else 0
             if h.trainer:
                 h.pkey = "p:" + h.trainer.strip().lower()
