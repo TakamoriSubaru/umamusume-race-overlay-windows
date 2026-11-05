@@ -158,6 +158,35 @@ def short_outfit_name(title):
     return title
 
 
+# Event names of outfits (card id -> name), matched from the list of alts with the card names in umdb.json.
+# Only the ones that are certain. Everything else uses the card name, or what you put in images/outfits.json.
+CARD_EVENTS = {
+    100202: "Summer",
+    100402: "Summer",
+    100802: "Christmas",
+    101202: "Wedding",
+    101602: "BLAZE",
+    101902: "Halloween",
+    102102: "Festival",
+    102302: "Christmas",
+    102702: "Valentine",
+    103002: "Halloween",
+    103402: "Festival",
+    103702: "Valentine",
+    103802: "Wedding",
+    104502: "Halloween",
+    105002: "Steampunk",
+    105102: "Wedding",
+    105202: "New Year",
+    105302: "Summer Trip",
+    105802: "Halloween",
+    105902: "Camping",
+    106102: "Cheerleader",
+    106902: "Ballroom",
+    107102: "Ballroom",
+}
+
+
 class CardTitles:
     """Official names of the outfit cards, read from Race Overlay's umdb.json (resources folder), for example
     card 100402 = "Hot☆Summer Night". It is only read when it is needed, and may be missing."""
@@ -224,6 +253,8 @@ class OutfitsDB:
         if not card_id:
             card_id = (self.data.get(str(int(dress_id))) or {}).get("card", 0)
         auto = BUILTIN_OUTFITS.get(int(dress_id), "")
+        if not auto and card_id:
+            auto = CARD_EVENTS.get(int(card_id), "")
         if not auto and self.titles is not None and card_id:
             auto = self.titles.title(card_id)
         return auto
