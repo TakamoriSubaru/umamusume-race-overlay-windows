@@ -51,6 +51,11 @@ class PlayersDB:
                 return k
         return None
 
+    def club_of(self, name):
+        """The club of a trainer (from a player pictures zip), or ""."""
+        k = self.key_for(name or "")
+        return str((self.data.get(k) or {}).get("club", "")) if k else ""
+
     def _entry(self, name):
         k = self.key_for(name) or name.strip()
         return self.data.setdefault(k, {"image": "", "seen": 0, "last_uma": "", "last_seen": ""})
@@ -219,8 +224,21 @@ class CardTitles:
             return ""
 
 
+# The race gives the outfit as a dress id = uma id * 100 + a number. For a normal event outfit that number
+# is the same for every uma (30 = Summer for Special Week, Maruzensky, Gold Ship...; seen in your own outfits.json).
+# A number below 10 means the dress id is the card id itself (100102 = card 100102).
+SUFFIX_EVENTS = {
+    10: "New Year", 16: "Steampunk", 20: "Ballroom", 23: "Camping", 26: "Wedding", 30: "Summer",
+    40: "Halloween", 43: "Festival", 46: "Christmas", 50: "Cheerleader",
+}
+
+
 def is_alt_outfit(chara_id, dress_id):
-    return bool(chara_id and dress_id and int(dress_id) != int(chara_id) * 100 + 1)
+    """True when the dress is another outfit of this uma (not her normal one, and not a made-up id of a background runner)."""
+    if not (chara_id and dress_id):
+        return False
+    chara, dress = int(chara_id), int(dress_id)
+    return dress // 100 == chara and dress != chara * 100 + 1
 
 
 class OutfitsDB:
@@ -248,13 +266,53 @@ class OutfitsDB:
         except Exception as e:
             print("could not save outfits.json:", e)
 
+    def card_event(self, card_id):
+        """The event name of a card when it is known ("Halloween"), else ""."""
+        card_id = int(card_id)
+        ev = CARD_EVENTS.get(card_id, "")
+        if not ev and self.titles is not None:
+            t = self.titles.title(card_id)
+            raw = self.titles.titles.get(card_id, "") if self.titles.titles else ""
+            if t and t != raw:                       # short_outfit_name found a theme in the title
+                ev = t
+        return ev
+
+    def card_for(self, chara_id, dress_id, candidates=()):
+        """The card (= the picture) of an outfit when the race only tells the dress id, or 0 when it cannot tell.
+        candidates: card ids of this uma that exist on this computer (from the picture folders)."""
+        chara, dress = int(chara_id or 0), int(dress_id or 0)
+        if not is_alt_outfit(chara, dress):
+            return 0
+        suffix = dress % 100
+        if suffix < 10:
+            return dress
+        cards = {int(c) for c in candidates} | {c for c in CARD_EVENTS if c // 100 == chara}
+        if self.titles is not None:
+            self.titles.title(0)                      # makes sure umdb.json is loaded
+            cards |= {c for c in (self.titles.titles or {}) if c // 100 == chara}
+        cards = sorted(c for c in cards if c // 100 == chara and c != chara * 100 + 1)
+        event = SUFFIX_EVENTS.get(suffix, "")
+        if event:
+            for c in cards:
+                if self.card_event(c) == event:
+                    return c
+        unknown = [c for c in cards if not self.card_event(c)]
+        if len(unknown) == 1 and (not event or len(cards) == 1 or all(not self.card_event(c) for c in cards)):
+            return unknown[0]
+        if not event and len(cards) == 1:
+            return cards[0]
+        return 0
+
     def auto_label(self, dress_id, card_id=0):
-        """The name the program finds by itself: a built-in short name, else the official card name."""
+        """The name the program finds by itself: the event of the outfit (Halloween, Summer...), else the official card name."""
+        dress = int(dress_id or 0)
         if not card_id:
-            card_id = (self.data.get(str(int(dress_id))) or {}).get("card", 0)
-        auto = BUILTIN_OUTFITS.get(int(dress_id), "")
+            card_id = (self.data.get(str(dress)) or {}).get("card", 0)
+        auto = BUILTIN_OUTFITS.get(dress, "")
         if not auto and card_id:
             auto = CARD_EVENTS.get(int(card_id), "")
+        if not auto and dress % 100 >= 10:
+            auto = SUFFIX_EVENTS.get(dress % 100, "")
         if not auto and self.titles is not None and card_id:
             auto = self.titles.title(card_id)
         return auto

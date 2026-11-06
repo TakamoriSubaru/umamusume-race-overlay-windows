@@ -681,6 +681,8 @@ class SettingsDialog(QDialog):
         fg.addRow("Running style", check("row_style", "Show F / P / L / E", True, "Full tower only."))
         fg.addRow("Players only", check("players_only", "Hide umas without a trainer name (NPCs)", False,
                                         "Only when somebody in the race has a trainer name."))
+        fg.addRow("Club", check("show_club", "Show each player's club under the name (from the pictures zip)", False,
+                                "The clubs come with the zip of player pictures (Home > More > Import pictures from a zip)."))
         fg.addRow("Club tags", check("strip_tags", "Show CLUB｜Name as Name", False,
                                      "Used in the tower, the results board and the skill luck board."))
         fg.addRow("Team colour", check("tower_team_color", "Stripe for the players of a draft team", True,
@@ -848,8 +850,8 @@ class SettingsDialog(QDialog):
                       "Choose a picture for each one. Trainers without a picture get their uma face.")
         info.setWordWrap(True)
         v.addWidget(info)
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Trainer", "Races", "Last uma", "Picture"])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["Trainer", "Races", "Last uma", "Picture", "Club"])
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -1951,7 +1953,7 @@ class SettingsDialog(QDialog):
                 shown = "link: " + img
             else:
                 shown = "file: " + os.path.basename(img)
-            for c, text in enumerate((name, str(d.get("seen", 0)), d.get("last_uma", ""), shown)):
+            for c, text in enumerate((name, str(d.get("seen", 0)), d.get("last_uma", ""), shown, d.get("club", ""))):
                 self.table.setItem(i, c, QTableWidgetItem(text))
             if name == keep:
                 self.table.selectRow(i)
@@ -2029,17 +2031,41 @@ class SettingsDialog(QDialog):
     def import_pics(self):
         path, _ = QFileDialog.getOpenFileName(self, "Choose the pictures zip", os.path.expanduser("~"),
                                               "Zip (*.zip)")
-        if not path:
-            return
+        if path:
+            self.import_zip(path)
+
+    def import_zip(self, path):
+        from .images import LAST_PACK
+        LAST_PACK["players"], LAST_PACK["clubs"] = 0, []
         try:
             n = import_pictures(path, self.ov.images_dir)
         except (ValueError, OSError) as e:
             QMessageBox.warning(self, "Pictures", str(e))
             return
-        QMessageBox.information(self, "Pictures", "%d pictures were added to:\n%s\n\nThe program restarts now so "
-                                "that it can use them." % (n, self.ov.images_dir))
+        clubs = LAST_PACK["clubs"]
+        extra = ""
+        if LAST_PACK["players"]:
+            extra = "\n%d players got their picture." % LAST_PACK["players"]
+            if clubs:
+                extra += "\n%d clubs found: %s%s." % (len(clubs), ", ".join(clubs[:8]), ", ..." if len(clubs) > 8 else "")
+                if not self.ov.s.get("show_club", False):
+                    extra += "\n(Look > Tower > Club shows them in the tower.)"
+        QMessageBox.information(self, "Pictures", "%d pictures were added to:\n%s\n%s\n\nThe program restarts now so "
+                                "that it can use them." % (n, self.ov.images_dir, extra))
         from .updater import restart_program
         restart_program()
+
+    # drag a pictures zip onto this window to import it
+    def dragEnterEvent(self, e):
+        if any(u.toLocalFile().lower().endswith(".zip") for u in e.mimeData().urls()):
+            e.acceptProposedAction()
+
+    def dropEvent(self, e):
+        for u in e.mimeData().urls():
+            if u.toLocalFile().lower().endswith(".zip"):
+                e.acceptProposedAction()
+                QTimer.singleShot(0, lambda p=u.toLocalFile(): self.import_zip(p))
+                return
 
     def export_pics(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save my pictures as a zip",

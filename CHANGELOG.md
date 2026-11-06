@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- **Easier player pictures and clubs:** drag a pictures zip (like the one Poorpel's bot makes) onto the settings window to import it. The message says how many players got a picture and which clubs were found. People > Players has a *Club* column, and *Look > Tower > Club* shows each player's club under their name.
+
 ## 2.0.0
 
 A big update, so the version number jumps to 2.0.0.

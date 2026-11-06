@@ -145,6 +145,21 @@ class ImageStore(QThread):
         path = find_file_ci(self.players, safe)
         return read_file(path) if path else b""
 
+    def cards_of(self, chara_id):
+        """Card ids of this uma that have a picture on this computer (images/uma, Race Overlay's character_thumbs)."""
+        import re
+        pat = re.compile(r"chara_stand_%d_(\d+)\." % int(chara_id))
+        found = set()
+        for d in [self.uma] + self.extra_dirs:
+            try:
+                for n in os.listdir(d):
+                    m = pat.match(n)
+                    if m:
+                        found.add(int(m.group(1)))
+            except OSError:
+                pass
+        return found
+
     def _uma(self, spec):
         card, chara, name = spec.get("card_id", 0), spec.get("chara_id", 0), spec.get("name", "")
         # Another outfit only takes a picture made for that card. A picture named after the uma or her
@@ -209,6 +224,9 @@ def _merge_json(old_bytes, new_bytes):
     return new_bytes
 
 
+LAST_PACK = {"players": 0, "clubs": []}       # what the last player pack brought: how many trainers, which clubs
+
+
 def _import_player_pack(z, records_name, images_dir):
     """A zip with pfp_records.json (discord id -> in-game name) and <discord id>.png pictures:
     each picture becomes the picture of that trainer. Returns how many trainers got a picture."""
@@ -232,6 +250,7 @@ def _import_player_pack(z, records_name, images_dir):
         db = {}
     low = {k.strip().lower(): k for k in db}
     n = 0
+    clubs = set()
     for did, rec in records.items():
         if not isinstance(rec, dict):
             continue
@@ -260,12 +279,14 @@ def _import_player_pack(z, records_name, images_dir):
             e["image"] = "players/" + safe + ext
             if rec.get("club_name"):
                 e["club"] = rec["club_name"]
+                clubs.add(rec["club_name"])
             low[key.lower()] = k
         n += 1
     tmp = db_path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(db, f, indent=2, ensure_ascii=False)
     os.replace(tmp, db_path)
+    LAST_PACK["players"], LAST_PACK["clubs"] = n, sorted(clubs, key=str.lower)
     return n
 
 

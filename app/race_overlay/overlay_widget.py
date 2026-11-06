@@ -367,7 +367,12 @@ class OverlayWidget(FramelessMixin, QWidget):
                 h.skills = skill_ids(rm.get("skills") or rm.get("skill_array"))
             chara = rm.get("chara_id") or h.chara_id
             h.chara_id = chara
-            h.card_id = rm.get("card_id") or (chara * 100 + 1 if chara else 0)
+            base_card = chara * 100 + 1 if chara else 0
+            h.card_id = rm.get("card_id") or base_card
+            if h.card_id == base_card and h.dress_id:            # the live data only gives the outfit (dress id): find its card
+                guess = self.outfits.card_for(chara, h.dress_id, self.thumbs.cards_of(chara))
+                if guess:
+                    h.card_id = guess
             h.label = self.outfits.display(h.name, h.chara_id, h.dress_id, h.card_id)
             base = h.chara_id * 100 + 1 if h.chara_id else 0
             if h.trainer:
@@ -887,11 +892,12 @@ class OverlayWidget(FramelessMixin, QWidget):
         """(headline, small line under it) for a row, following the 'Names' choice in the Look tab."""
         mode = self.s.get("names", "both")
         trainer = strip_club_tag(h.trainer) if self.s.get("strip_tags", False) else h.trainer
+        club = self.players.club_of(h.trainer) if self.s.get("show_club", False) else ""
         if mode == "trainer" and trainer:
-            return trainer, ""
+            return trainer, club
         if mode == "uma" or not trainer:
-            return h.label, ""
-        return trainer, h.label
+            return h.label, club
+        return trainer, " · ".join(x for x in (h.label, club) if x)
 
     def gap_pair(self, h):
         """The two gap texts of a row, following 'Gap' in the Tower tab."""
