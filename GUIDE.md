@@ -46,7 +46,7 @@ Use *Windowed* or *Borderless windowed* in the game's graphics settings. A true 
 ## 6. Pictures of umas and players
 
 The release does not contain pictures (the uma art belongs to Cygames). If someone gave you a **pictures zip**:
-Home tab, **More**, **Import pictures from a zip...**, choose the zip. The program restarts and shows them.
+People tab, **Players**, **Import pictures zip...**, choose the zip. The program restarts and shows them.
 To share your own pictures: **Save my pictures as a zip...** and send the file privately (not on GitHub).
 
 ## 7. Change what is shown

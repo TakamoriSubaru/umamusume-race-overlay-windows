@@ -72,6 +72,13 @@ SOURCE_CHOICES = (("", "Follow the default (live)" if IS_WINDOWS else "Follow th
                   ("watch", "Saved races: read the race files from a folder"))
 
 
+class _NameItem(QTableWidgetItem):
+    """A table cell that sorts A-Z without caring about capital letters."""
+
+    def __lt__(self, other):
+        return self.text().casefold() < other.text().casefold()
+
+
 class Collapsible(QWidget):
     """A folded section: a title you click to open it. Keeps the less used settings out of the way."""
 
@@ -288,15 +295,6 @@ class SettingsDialog(QDialog):
             bo = QPushButton("Open folder")
             bo.clicked.connect(lambda _=False, pth=path: open_folder(pth))
             bl.addWidget(bo)
-        prow = QHBoxLayout()
-        bimp = QPushButton("Import pictures from a zip...")
-        bimp.setToolTip("A zip a friend made with 'Save my pictures as a zip'")
-        bimp.clicked.connect(self.import_pics)
-        bexp = QPushButton("Save my pictures as a zip...")
-        bexp.clicked.connect(self.export_pics)
-        prow.addWidget(bimp)
-        prow.addWidget(bexp)
-        bl.addLayout(prow)
         mm.addWidget(box)
 
         ubox = QGroupBox("Updates  (current version %s)" % APP_VERSION)
@@ -587,6 +585,37 @@ class SettingsDialog(QDialog):
         fc.addRow("Font", self.cmb_font)
         fc.addRow("", self.lbl_fontprev)
 
+        # the header and the racers can have their own font, size and colour
+        self.role_cmb, self.role_btn = {}, {}
+        for key, label in (("header_font", "Header font"), ("racer_font", "Racer font")):
+            cmb = QComboBox()
+            cmb.setMaxVisibleItems(25)
+            cmb.activated.connect(lambda _i, k=key: self.on_role_font(k))
+            cmb.setToolTip("The font of the tower header (track info) or of the racer names. \"Same as the main font\" follows Font above.")
+            self.role_cmb[key] = cmb
+            self.fill_role_font(key, s.get(key, ""))
+            fc.addRow(label, cmb)
+        self.sl_racer = QSlider(Qt.Orientation.Horizontal)
+        self.sl_racer.setRange(60, 160)
+        self.sl_racer.setValue(int(float(s.get("racer_scale", 1.0)) * 100))
+        self.lbl_racer = QLabel("%d%%" % self.sl_racer.value())
+        self.sl_racer.valueChanged.connect(self.on_racer_size)
+        rrow = QHBoxLayout()
+        rrow.addWidget(self.sl_racer)
+        rrow.addWidget(self.lbl_racer)
+        fc.addRow("Racer text size", rrow)
+        for key, label in (("header_color", "Header colour"), ("racer_color", "Racer colour")):
+            b = QPushButton()
+            b.clicked.connect(lambda _c=False, k=key: self.pick_role(k))
+            rb = QPushButton("Same as text colour")
+            rb.clicked.connect(lambda _c=False, k=key: self.pick_role(k, reset=True))
+            self.role_btn[key] = b
+            crow = QHBoxLayout()
+            crow.addWidget(b, 1)
+            crow.addWidget(rb)
+            fc.addRow(label, crow)
+            self.swatch_role(key)
+
         self.cb_arrows = QCheckBox("Show an arrow when a uma gains or loses a place")
         self.cb_arrows.setChecked(bool(s.get("rank_arrows", True)))
         self.cb_arrows.toggled.connect(lambda on: ov.set_setting("rank_arrows", on))
@@ -682,7 +711,7 @@ class SettingsDialog(QDialog):
         fg.addRow("Players only", check("players_only", "Hide umas without a trainer name (NPCs)", False,
                                         "Only when somebody in the race has a trainer name."))
         fg.addRow("Club", check("show_club", "Show each player's club under the name (from the pictures zip)", False,
-                                "The clubs come with the zip of player pictures (Home > More > Import pictures from a zip)."))
+                                "The clubs come with the zip of player pictures (People > Players > Import pictures from a zip)."))
         fg.addRow("Club tags", check("strip_tags", "Show CLUB｜Name as Name", False,
                                      "Used in the tower, the results board and the skill luck board."))
         fg.addRow("Team colour", check("tower_team_color", "Stripe for the players of a draft team", True,
@@ -850,28 +879,54 @@ class SettingsDialog(QDialog):
                       "Choose a picture for each one. Trainers without a picture get their uma face.")
         info.setWordWrap(True)
         v.addWidget(info)
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["Trainer", "Races", "Last uma", "Picture", "Club"])
+        srow = QHBoxLayout()
+        self.ed_find = QLineEdit()
+        self.ed_find.setPlaceholderText("Search a trainer, Discord name or club...")
+        self.ed_find.setClearButtonEnabled(True)
+        self.ed_find.textChanged.connect(self.filter_players)
+        srow.addWidget(self.ed_find, 1)
+        self.lbl_count = QLabel()
+        srow.addWidget(self.lbl_count)
+        v.addLayout(srow)
+        self.table = QTableWidget(0, 7)
+        self.table.setHorizontalHeaderLabels(["Trainer", "Discord name", "Discord id", "Club", "Races", "Last uma", "Picture"])
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)   # Ctrl/Shift for several
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
-        self.table.setColumnWidth(0, 160)
-        self.table.setColumnWidth(1, 55)
-        self.table.setColumnWidth(2, 130)
+        self.table.setWordWrap(False)
+        self.table.setSortingEnabled(True)                # click a column title to sort
+        self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
+        hh = self.table.horizontalHeader()
+        hh.setStretchLastSection(True)
+        hh.setMinimumSectionSize(40)
+        for col, width in enumerate((112, 98, 104, 88, 46, 96)):
+            self.table.setColumnWidth(col, width)
+        self.table.setToolTip("Click a column title to sort. Ctrl or Shift + click to pick several trainers.")
         v.addWidget(self.table, 1)
         br = QHBoxLayout()
         for text, fn in (("Choose picture...", self.choose_file), ("Paste link...", self.paste_link),
-                         ("Remove picture", self.remove_pic), ("Add trainer...", self.add_trainer)):
+                         ("Remove picture", self.remove_pic), ("Add trainer...", self.add_trainer),
+                         ("Delete trainer", self.delete_trainers)):
             b = QPushButton(text)
             if text.startswith("Choose"):
                 b.setObjectName("primary")
             b.clicked.connect(fn)
             br.addWidget(b)
         v.addLayout(br)
+        prow = QHBoxLayout()
+        bimp = QPushButton("Import pictures zip...")
+        bimp.setToolTip("The zip of player pictures from Poorpel's bot, or a zip a friend made with 'Save my pictures as a zip'. "
+                        "You can also drag the zip onto this window.")
+        bimp.setObjectName("primary")
+        bimp.clicked.connect(self.import_pics)
+        bexp = QPushButton("Save my pictures as a zip...")
+        bexp.clicked.connect(self.export_pics)
+        prow.addWidget(bimp)
+        prow.addWidget(bexp)
+        v.addLayout(prow)
         people.addTab(pl, "Players")
 
         # ---- Umas tab (the uma pictures)
@@ -1700,6 +1755,11 @@ class SettingsDialog(QDialog):
         self.swatch(self.btn_tc, s["text_color"])
         self.swatch(self.btn_sc, s["sub_color"])
         self.swatch(self.btn_ac, s.get("accent") or "#f5c518")
+        for key in getattr(self, "role_btn", {}):
+            self.swatch_role(key)
+            self.fill_role_font(key.replace("color", "font"), s.get(key.replace("color", "font"), ""))
+        if hasattr(self, "sl_racer"):
+            self.sl_racer.setValue(int(float(s.get("racer_scale", 1.0)) * 100))
         for key, b in self.pod_btns:
             self.swatch(b, s.get(key) or "#ffffff")
         self.lbl_size.setText("%d%%" % int(float(s["text_scale"]) * 100))
@@ -1709,6 +1769,52 @@ class SettingsDialog(QDialog):
         if c.isValid():
             self.ov.set_setting(key, c.name())
             self.swatch(btn, c.name())
+
+    def swatch_role(self, key):
+        v = self.ov.s.get(key) or ""
+        b = self.role_btn[key]
+        self.swatch(b, v or self.ov.s["text_color"])
+        if not v:
+            b.setText("Same as text colour")
+
+    def pick_role(self, key, reset=False):
+        if reset:
+            self.ov.set_setting(key, "")
+        else:
+            c = QColorDialog.getColor(QColor(self.ov.s.get(key) or self.ov.s["text_color"]), self, "Choose colour")
+            if not c.isValid():
+                return
+            self.ov.set_setting(key, c.name())
+        self.swatch_role(key)
+
+    def on_racer_size(self, v):
+        self.lbl_racer.setText("%d%%" % v)
+        self.ov.set_setting("racer_scale", v / 100.0)
+
+    def fill_role_font(self, key, current):
+        have = {f.lower(): f for f in QFontDatabase.families()}
+        names = [have[n.lower()] for n in self.COMMON_FONTS if n.lower() in have]
+        if current and current.lower() not in [n.lower() for n in names]:
+            names.insert(0, current)
+        cmb = self.role_cmb[key]
+        cmb.blockSignals(True)
+        cmb.clear()
+        cmb.addItem("Same as the main font", "")
+        for n in names:
+            cmb.addItem(n, n)
+            cmb.setItemData(cmb.count() - 1, QFont(n, 12), Qt.ItemDataRole.FontRole)
+        cmb.addItem("More fonts...", "__more__")
+        cmb.setCurrentIndex(max(0, cmb.findData(current or "")))
+        cmb.blockSignals(False)
+
+    def on_role_font(self, key):
+        cmb = self.role_cmb[key]
+        data = cmb.currentData()
+        if data == "__more__":
+            cur = self.ov.s.get(key, "")
+            data = self.pick_font(cur) or cur
+            self.fill_role_font(key, data)
+        self.ov.set_setting(key, data or "")
 
     def on_theme(self, name):
         self.ov.apply_theme(name)
@@ -1755,6 +1861,12 @@ class SettingsDialog(QDialog):
                 ok = isinstance(v, str) and hexre.match(v)
             elif k in shapes:
                 ok = v in shapes[k]
+            elif k in ("header_color", "racer_color"):
+                ok = isinstance(v, str) and (v == "" or hexre.match(v))
+            elif k in ("header_font", "racer_font"):
+                ok = isinstance(v, str)
+            elif k == "racer_scale":
+                ok = isinstance(v, (int, float)) and not isinstance(v, bool) and 0.6 <= float(v) <= 1.6
             elif k in ("bg_opacity", "text_scale"):
                 ok = isinstance(v, (int, float)) and not isinstance(v, bool) and 0.0 <= float(v) <= 2.0
             elif k == "font":
@@ -1931,19 +2043,43 @@ class SettingsDialog(QDialog):
 
     # ---- players helpers
     def selected(self):
-        r = self.table.currentRow()
-        it = self.table.item(r, 0) if r >= 0 else None
-        if it is None:
+        keys = self.selected_all()
+        if not keys:
             QMessageBox.information(self, "Pick a trainer", "Click a trainer in the list first.")
             return None
-        return it.text()
+        return keys[0]
+
+    def selected_all(self):
+        rows = sorted({i.row() for i in self.table.selectedIndexes()})
+        return [self.table.item(r, 0).text() for r in rows if self.table.item(r, 0)]
+
+    def filter_players(self, *_):
+        text = self.ed_find.text().strip().lower()
+        shown = 0
+        for r in range(self.table.rowCount()):
+            hay = " ".join((self.table.item(r, c).text() if self.table.item(r, c) else "") for c in (0, 1, 2, 3)).lower()
+            hide = bool(text) and text not in hay
+            self.table.setRowHidden(r, hide)
+            shown += 0 if hide else 1
+        self.lbl_count.setText("%d trainers" % shown if not text else "%d of %d" % (shown, self.table.rowCount()))
+
+    def delete_trainers(self):
+        keys = self.selected_all()
+        if not keys:
+            QMessageBox.information(self, "Pick a trainer", "Click a trainer in the list first (Ctrl or Shift + click for several).")
+            return
+        shown = ", ".join(keys[:5]) + (" ..." if len(keys) > 5 else "")
+        if QMessageBox.question(self, "Delete trainers", "Delete %d trainer%s from the list?\n%s\n\nThe picture files stay in your "
+                                "folder. A trainer that races again is added again." % (len(keys), "" if len(keys) == 1 else "s", shown)
+                                ) != QMessageBox.StandardButton.Yes:
+            return
+        self.ov.players.remove_keys(keys)
+        self.refresh_players()
 
     def refresh_players(self):
-        keep = None
-        r = self.table.currentRow()
-        if r >= 0 and self.table.item(r, 0):
-            keep = self.table.item(r, 0).text()
+        keep = set(self.selected_all())
         rows = self.ov.players.rows()
+        self.table.setSortingEnabled(False)               # fill first, sort after
         self.table.setRowCount(len(rows))
         for i, (name, d) in enumerate(rows):
             img = d.get("image", "")
@@ -1953,10 +2089,19 @@ class SettingsDialog(QDialog):
                 shown = "link: " + img
             else:
                 shown = "file: " + os.path.basename(img)
-            for c, text in enumerate((name, str(d.get("seen", 0)), d.get("last_uma", ""), shown, d.get("club", ""))):
-                self.table.setItem(i, c, QTableWidgetItem(text))
-            if name == keep:
-                self.table.selectRow(i)
+            races = QTableWidgetItem()
+            races.setData(Qt.ItemDataRole.DisplayRole, int(d.get("seen", 0)))       # a number: sorts as a number
+            cells = (_NameItem(name), _NameItem(d.get("discord_name", "")),
+                     _NameItem(str(d.get("discord_id", ""))), _NameItem(d.get("club", "")),
+                     races, _NameItem(d.get("last_uma", "")), _NameItem(shown))
+            for c, it in enumerate(cells):
+                it.setToolTip(it.text())
+                self.table.setItem(i, c, it)
+        self.table.setSortingEnabled(True)
+        for r in range(self.table.rowCount()):
+            if self.table.item(r, 0) and self.table.item(r, 0).text() in keep:
+                self.table.selectRow(r)
+        self.filter_players()
 
     def choose_file(self):
         name = self.selected()
@@ -2036,7 +2181,7 @@ class SettingsDialog(QDialog):
 
     def import_zip(self, path):
         from .images import LAST_PACK
-        LAST_PACK["players"], LAST_PACK["clubs"] = 0, []
+        LAST_PACK["players"], LAST_PACK["clubs"], LAST_PACK["same_names"] = 0, [], []
         try:
             n = import_pictures(path, self.ov.images_dir)
         except (ValueError, OSError) as e:
@@ -2050,6 +2195,9 @@ class SettingsDialog(QDialog):
                 extra += "\n%d clubs found: %s%s." % (len(clubs), ", ".join(clubs[:8]), ", ..." if len(clubs) > 8 else "")
                 if not self.ov.s.get("show_club", False):
                     extra += "\n(Look > Tower > Club shows them in the tower.)"
+        if LAST_PACK.get("same_names"):
+            extra += "\n\n%d in-game names belong to two players (%s): both are listed, the first one is used in the race." % (
+                len(LAST_PACK["same_names"]), ", ".join(LAST_PACK["same_names"][:5]))
         QMessageBox.information(self, "Pictures", "%d pictures were added to:\n%s\n%s\n\nThe program restarts now so "
                                 "that it can use them." % (n, self.ov.images_dir, extra))
         from .updater import restart_program

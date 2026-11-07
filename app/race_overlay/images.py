@@ -224,7 +224,7 @@ def _merge_json(old_bytes, new_bytes):
     return new_bytes
 
 
-LAST_PACK = {"players": 0, "clubs": []}       # what the last player pack brought: how many trainers, which clubs
+LAST_PACK = {"players": 0, "clubs": [], "same_names": []}       # what the last player pack brought: how many trainers, which clubs
 
 
 def _import_player_pack(z, records_name, images_dir):
@@ -249,11 +249,14 @@ def _import_player_pack(z, records_name, images_dir):
     except Exception:
         db = {}
     low = {k.strip().lower(): k for k in db}
+    by_did = {str(e.get("discord_id")): k for k, e in db.items() if e.get("discord_id")}
     n = 0
     clubs = set()
+    same = []                                           # in-game names that two players share
     for did, rec in records.items():
         if not isinstance(rec, dict):
             continue
+        did = str(did)
         src = None
         for ext in sorted(IMG_EXTS):
             src = names.get("%s%s%s" % (folder, did, ext))
@@ -263,30 +266,42 @@ def _import_player_pack(z, records_name, images_dir):
             continue
         data = z.read(src)
         ext = os.path.splitext(src.filename)[1].lower()
-        wanted = []
-        for key in (rec.get("in_game_name"), rec.get("display_name")):      # the name seen in the race, and the Discord name
-            key = (key or "").strip()
-            if key and key.lower() not in [w.lower() for w in wanted]:
-                wanted.append(key)
-        if not wanted:
+        ingame = (rec.get("in_game_name") or "").strip()
+        disp = (rec.get("display_name") or "").strip()
+        main = ingame or disp
+        if not main:
             continue
-        safe = "".join(c if c not in '/\\:*?"<>|' else "_" for c in wanted[0]).strip() or str(did)
+        key = by_did.get(did)                           # the same Discord person imported before: update that row
+        if key is None:
+            key = low.get(main.lower())
+            owner = str((db.get(key) or {}).get("discord_id") or "") if key else ""
+            if key is not None and owner and owner != did:     # another player already has this in-game name
+                same.append(main)
+                key = "%s (%s)" % (main, disp or did)
+            elif key is None:
+                key = main
+        safe = "".join(c if c not in '/\\:*?"<>|' else "_" for c in key).strip() or did
         with open(os.path.join(players_dir, safe + ext), "wb") as f:
             f.write(data)
-        for key in wanted:
-            k = low.get(key.lower(), key)
-            e = db.setdefault(k, {"image": "", "seen": 0, "last_uma": "", "last_seen": ""})
-            e["image"] = "players/" + safe + ext
-            if rec.get("club_name"):
-                e["club"] = rec["club_name"]
-                clubs.add(rec["club_name"])
-            low[key.lower()] = k
+        e = db.setdefault(key, {"image": "", "seen": 0, "last_uma": "", "last_seen": ""})
+        e["image"] = "players/" + safe + ext
+        e["discord_id"] = did
+        e["discord_name"] = disp
+        if rec.get("viewer_id"):
+            e["viewer_id"] = str(rec["viewer_id"])
+        if rec.get("club_name"):
+            e["club"] = rec["club_name"]
+            clubs.add(rec["club_name"])
+        e["aliases"] = [x for x in {disp, ingame} if x and x.lower() != key.lower()]   # other names he is seen under
+        low[key.lower()] = key
+        by_did[did] = key
         n += 1
     tmp = db_path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(db, f, indent=2, ensure_ascii=False)
     os.replace(tmp, db_path)
     LAST_PACK["players"], LAST_PACK["clubs"] = n, sorted(clubs, key=str.lower)
+    LAST_PACK["same_names"] = sorted(set(same), key=str.lower)
     return n
 
 

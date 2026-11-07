@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.2
+
+- **Right outfit in the tower:** the picture and name now follow the outfit the uma *wears* in the race, not the card she was trained with. A Summer Special Week shows as Summer Special Week, and Kitasan Black in her New Year outfit shows as New Year.
+- **People > Players is a proper list:** columns for the trainer name, the Discord name, the Discord id, the club, the races and the last uma. Click a column title to sort (A-Z by name by default). A search box finds a trainer, Discord name or club. Select one or several trainers (Ctrl or Shift + click) and press *Delete trainer*.
+- **Trainer and Discord name are connected:** a pictures zip from the bot now makes one row per player (matched by Discord id), and the Discord name also finds that player. Two players with the same in-game name are both kept, the second as *Name (discord name)*. The live race data only has the in-game name, so for two players with exactly the same name the program uses the first one.
+- **The import button moved** from Home > More to People > Players (*Import pictures zip...* and *Save my pictures as a zip...*).
+- **More customization (Look > Colours and pictures):** its own font and colour for the tower header, and its own font, size and colour for the racer names. *Same as text colour* goes back to normal. These are saved in *Save my look* too.
+
 ## 2.0.1
 
 - **Easier player pictures and clubs:** drag a pictures zip (like the one Poorpel's bot makes) onto the settings window to import it. The message says how many players got a picture and which clubs were found. People > Players has a *Club* column, and *Look > Tower > Club* shows each player's club under their name.

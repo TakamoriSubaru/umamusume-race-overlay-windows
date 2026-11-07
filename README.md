@@ -49,7 +49,7 @@ Add a **Window Capture** source, set the *Capture Method* to **Windows 10 (1903 
 
 ## 🔀 Where the settings live
 
-Settings, scores and the team match are saved in `%APPDATA%\race-overlay-native`. Your pictures go in `%APPDATA%\\race-overlay-native\\images`, so an update never loses them. To share them with a friend: Home tab, *More*, **Save my pictures as a zip...** (send it privately, never on GitHub: the uma pictures are Cygames' art), and the friend uses **Import pictures from a zip...**. If the program crashes at start, the reason is in `crash.log` in the settings folder and in a message box.
+Settings, scores and the team match are saved in `%APPDATA%\race-overlay-native`. Your pictures go in `%APPDATA%\\race-overlay-native\\images`, so an update never loses them. To share them with a friend: People tab, *Players*, **Save my pictures as a zip...** (send it privately, never on GitHub: the uma pictures are Cygames' art), and the friend uses **Import pictures zip...**. If the program crashes at start, the reason is in `crash.log` in the settings folder and in a message box.
 
 ## ⬆️ Updating
 

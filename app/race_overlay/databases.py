@@ -49,7 +49,21 @@ class PlayersDB:
         for k in self.data:
             if k.strip().lower() == low:
                 return k
+        for k, e in self.data.items():                  # the Discord name (or another name) of a player
+            if any(str(a).strip().lower() == low for a in e.get("aliases", ())):
+                return k
         return None
+
+    def remove_keys(self, keys):
+        """Forget these exact rows (their picture files stay). Returns how many were removed."""
+        n = 0
+        for k in keys:
+            if k in self.data:
+                del self.data[k]
+                n += 1
+        if n:
+            self.save()
+        return n
 
     def club_of(self, name):
         """The club of a trainer (from a player pictures zip), or ""."""
@@ -166,6 +180,8 @@ def short_outfit_name(title):
 # Event names of outfits (card id -> name), matched from the list of alts with the card names in umdb.json.
 # Only the ones that are certain. Everything else uses the card name, or what you put in images/outfits.json.
 CARD_EVENTS = {
+    100102: "Summer",        # Special Week, Hopp'n Happy Heart
+    106802: "New Year",      # Kitasan Black, Crane's Ambition
     100202: "Summer",
     100402: "Summer",
     100802: "Christmas",
@@ -301,6 +317,8 @@ class OutfitsDB:
             return unknown[0]
         if not event and len(cards) == 1:
             return cards[0]
+        if event and unknown:                        # an event outfit: the oldest card that has no other event
+            return unknown[0]
         return 0
 
     def auto_label(self, dress_id, card_id=0):

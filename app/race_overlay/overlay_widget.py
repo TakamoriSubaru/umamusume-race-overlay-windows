@@ -338,6 +338,17 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.fit_to_rows()
         self.update()
 
+    def pick_card(self, chara, dress_id, trained_card=0):
+        """The card whose picture and name show for a runner. The outfit worn in the race (the dress id) decides:
+        the card in the race data is only the one she was trained with (a Summer Special Week can be trained
+        with the Ruler of Japan card)."""
+        base = chara * 100 + 1 if chara else 0
+        if chara and dress_id and int(dress_id) // 100 == int(chara):         # a real outfit id of this uma
+            if int(dress_id) == base:
+                return base
+            return self.outfits.card_for(chara, dress_id, self.thumbs.cards_of(chara)) or base
+        return trained_card or base
+
     def uma_full_name(self, card, chara, name):
         """"Inari One" for her normal outfit, "Inari One Festival" for another one (so two cards never look the same)."""
         if not card or not chara or int(card) == int(chara) * 100 + 1:
@@ -368,11 +379,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             chara = rm.get("chara_id") or h.chara_id
             h.chara_id = chara
             base_card = chara * 100 + 1 if chara else 0
-            h.card_id = rm.get("card_id") or base_card
-            if h.card_id == base_card and h.dress_id:            # the live data only gives the outfit (dress id): find its card
-                guess = self.outfits.card_for(chara, h.dress_id, self.thumbs.cards_of(chara))
-                if guess:
-                    h.card_id = guess
+            h.card_id = self.pick_card(chara, h.dress_id, rm.get("card_id") or 0)
             h.label = self.outfits.display(h.name, h.chara_id, h.dress_id, h.card_id)
             base = h.chara_id * 100 + 1 if h.chara_id else 0
             if h.trainer:
@@ -605,10 +612,23 @@ class OverlayWidget(FramelessMixin, QWidget):
         return "  ·  ".join(parts)
 
     # ----- painting ------------------------------------------------------------
+    _role = ""                                  # "header" or "row" while one of those is being drawn
+
+    def pick_color(self, role):
+        """The text colour of the header or of the tower rows: their own colour, or the main text colour."""
+        c = QColor(self.s.get(role + "_color") or "")
+        return c if c.isValid() else QColor(self.s["text_color"])
+
     def fnt(self, px, bold=False, mono=False):
-        """A font that follows the Settings window (family + size %)."""
-        fam = self.s.get("font") or ("Monospace" if mono else "")
+        """A font that follows the Settings window (family + size %), or the header / racer font of the part being drawn."""
+        role = {"header": "header", "row": "racer"}.get(self._role, "")
+        fam = (self.s.get(role + "_font") if role and not mono else "") or self.s.get("font") or ("Monospace" if mono else "")
         f = QFont(fam) if fam else QFont()
+        if self._role == "row":
+            try:
+                px = px * min(1.6, max(0.6, float(self.s.get("racer_scale", 1.0))))
+            except (TypeError, ValueError):
+                pass
         f.setPixelSize(max(6, int(round(px * float(self.s.get("text_scale", 1.0))))))
         f.setBold(bold)
         return f
@@ -709,7 +729,7 @@ class OverlayWidget(FramelessMixin, QWidget):
     def draw_header_compact(self, p, lw):
         """One short header: the place on the left, the race clock on the right."""
         hh = self.hh_base
-        tc, sc = QColor(self.s["text_color"]), QColor(self.s["sub_color"])
+        tc, sc = self.pick_color("header"), QColor(self.s["sub_color"])
         line1, _line2 = self.course_lines(self.course_info)
         cw = int(lw - 76)
         f1 = self.fnt(11, True)
@@ -726,7 +746,7 @@ class OverlayWidget(FramelessMixin, QWidget):
     def draw_header_clock(self, p, lw):
         """The header with only the race clock (Tower tab, Header)."""
         hh = self.hh_base
-        tc = QColor(self.s["text_color"])
+        tc = self.pick_color("header")
         p.setFont(self.fnt(15 if self.compact() else 20, True, mono=True)); p.setPen(tc)
         p.drawText(QRectF(8, 0, lw - 16, hh), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                    self.clock_text)
@@ -740,9 +760,11 @@ class OverlayWidget(FramelessMixin, QWidget):
         k = self.header_k()                 # "Header size": the header is drawn bigger or smaller as one piece
         p.save()
         p.scale(k, k)
+        self._role = "header"
         try:
             self.draw_header_scaled(p, lw / k, mode)
         finally:
+            self._role = ""
             p.restore()
 
     def fit_font(self, font, text, width, lowest=0.6):
@@ -763,7 +785,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         if self.compact():
             return self.draw_header_compact(p, lw)
         hh = self.hh_base
-        tc, sc = QColor(self.s["text_color"]), QColor(self.s["sub_color"])
+        tc, sc = self.pick_color("header"), QColor(self.s["sub_color"])
         line1, line2 = self.course_lines(self.course_info)
         place = self.s.get("header_clock", "auto")
         below = place == "below"
@@ -921,7 +943,7 @@ class OverlayWidget(FramelessMixin, QWidget):
 
     def draw_row_compact(self, p, h, lw, y):
         """A small row: place, picture, trainer (and uma) on the left, the gap or finish time on the right."""
-        tc, sc = QColor(self.s["text_color"]), QColor(self.s["sub_color"])
+        tc, sc = self.pick_color("racer"), QColor(self.s["sub_color"])
         rh = self.rh
         self.draw_row_base(p, h, lw, y)
         self.draw_team_stripe(p, h, y)
@@ -957,7 +979,14 @@ class OverlayWidget(FramelessMixin, QWidget):
         p.drawText(QRectF(lw - gap_w - 4, y, gap_w, rh), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, l1)
 
     def draw_row(self, p, h, lw, rows=None):
-        tc, sc = QColor(self.s["text_color"]), QColor(self.s["sub_color"])
+        self._role = "row"
+        try:
+            self.draw_row_inner(p, h, lw, rows)
+        finally:
+            self._role = ""
+
+    def draw_row_inner(self, p, h, lw, rows=None):
+        tc, sc = self.pick_color("racer"), QColor(self.s["sub_color"])
         if h.hidden:
             return
         y = self.hh + (h.y if h.y is not None else h.target)

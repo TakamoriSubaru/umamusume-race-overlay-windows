@@ -115,6 +115,11 @@ DEFAULT_SETTINGS = {
     "row_style": True,         # tower row: the running style badge F / P / L / E (full tower)
     "row_gap": "both",         # tower row: "both" (seconds and length), "time", "length" or "none"
     "header_scale": 1.0,       # size of the tower header (track info + clock) on its own, 1.0 = normal
+    "header_font": "",         # font of the tower header ("" = the main font)
+    "header_color": "",        # colour of the header text ("" = the text colour)
+    "racer_font": "",          # font of the names in the tower rows ("" = the main font)
+    "racer_scale": 1.0,        # size of the names in the tower rows on their own, 1.0 = normal
+    "racer_color": "",         # colour of the names in the tower rows ("" = the text colour)
     "header_clock": "auto",    # "auto" = lower line only when the track info does not fit, "right" = next to the track info, "below" = on the lower line
     "tower_header": "both",    # "both" = track info and clock, "clock" = clock only, "none"
     "players_only": False,     # tower: hide umas that have no trainer name (NPCs)
@@ -239,7 +244,7 @@ THEME_PRESETS = {
 
 # the settings that make up "my look" (Save my look / Load a look in the Look tab)
 LOOK_KEYS = ("bg", "bg_opacity", "text_color", "sub_color", "accent", "text_scale", "font",
-             "header_scale", "header_clock", "show_club", "podium_1", "podium_2", "podium_3", "picture_shape", "row_style", "pictures", "names",
+             "header_scale", "header_font", "header_color", "racer_font", "racer_scale", "racer_color", "header_clock", "show_club", "podium_1", "podium_2", "podium_3", "picture_shape", "row_style", "pictures", "names",
              "board_header", "board_footer", "results_style", "results_columns", "results_winner")
 
 
