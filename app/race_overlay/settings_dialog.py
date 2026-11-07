@@ -1237,6 +1237,17 @@ class SettingsDialog(QDialog):
             b.setMinimumWidth(10)
             r2.addWidget(b)
         sl.addLayout(r2)
+        r3 = QHBoxLayout()
+        b_sv = QPushButton("Save the races as a file...")
+        b_sv.setToolTip("All races counted here, in one file. Send it to a friend who counts the other rounds.")
+        b_sv.clicked.connect(self.save_races_file)
+        b_ld = QPushButton("Add races from a file...")
+        b_ld.setToolTip("Adds the races of a file a friend saved. A race you both counted is only counted once.")
+        b_ld.clicked.connect(self.load_races_file)
+        for b in (b_sv, b_ld):
+            b.setMinimumWidth(10)
+            r3.addWidget(b)
+        sl.addLayout(r3)
         pn = QLabel("<i>Players are matched by trainer name. Replays, previews and old race files "
                     "never give points, and the same race is never counted twice.</i>")
         pn.setWordWrap(True)
@@ -1532,6 +1543,31 @@ class SettingsDialog(QDialog):
         self.ov.book.undo_last()
         self.ov.standings.refresh(True)
         self.update_book_label()
+
+    def save_races_file(self):
+        if not self.ov.book.races:
+            QMessageBox.information(self, "Races", "No race is counted yet.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save the races", os.path.expanduser("~/cup-races.json"), "Races file (*.json)")
+        if path:
+            try:
+                self.ov.book.export_races(path)
+            except OSError as e:
+                QMessageBox.warning(self, "Races", "Could not save the file:\n%s" % e)
+
+    def load_races_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Add races from a file", os.path.expanduser("~"), "Races file (*.json)")
+        if not path:
+            return
+        try:
+            added, skipped = self.ov.book.import_races(path)
+        except (OSError, ValueError) as e:
+            QMessageBox.warning(self, "Races", "Could not read the file:\n%s" % e)
+            return
+        self.ov.standings.refresh(True)
+        self.update_book_label()
+        QMessageBox.information(self, "Races", "%d race%s added%s." % (added, "" if added == 1 else "s",
+                                (", %d already counted or not valid (skipped)" % skipped) if skipped else ""))
 
     def export_scores(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save the points", os.path.expanduser("~/standings.csv"), "CSV (*.csv)")

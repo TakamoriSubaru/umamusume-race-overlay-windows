@@ -910,12 +910,17 @@ class OverlayWidget(FramelessMixin, QWidget):
         tri.closeSubpath()
         p.fillPath(tri, col)
 
+    def display_trainer(self, name):
+        """A trainer name as the Look tab wants it: without the club tag, or as his Discord name."""
+        shown = strip_club_tag(name) if self.s.get("strip_tags", False) else name
+        if self.s.get("name_source") == "discord":              # his Discord name, when the pictures zip had it
+            shown = self.players.discord_name_of(name) or shown
+        return shown
+
     def name_parts(self, h):
         """(headline, small line under it) for a row, following the 'Names' choice in the Look tab."""
         mode = self.s.get("names", "both")
-        trainer = strip_club_tag(h.trainer) if self.s.get("strip_tags", False) else h.trainer
-        if self.s.get("name_source") == "discord":              # his Discord name, when the pictures zip had it
-            trainer = self.players.discord_name_of(h.trainer) or trainer
+        trainer = self.display_trainer(h.trainer)
         club = self.players.club_of(h.trainer) if self.s.get("show_club", False) else ""
         if mode == "trainer" and trainer:
             return trainer, club

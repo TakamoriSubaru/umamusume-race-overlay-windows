@@ -23,7 +23,7 @@ The overlay draws the race as normal windows that OBS captures with **Window Cap
 
 **New here? Read the [step by step guide](GUIDE.md).**
 
-1. Open **Releases** on this page and download **`race-overlay-windows-X.Y.Z.zip`**. The server files (Race Overlay) are already inside, in the `Server Files` folder.
+1. Open **Releases** on this page and download **`UmaRaceOverlay-Windows-X.Y.Z-DOWNLOAD-THIS.zip`** (the other zip, `...-auto-update-only.zip`, is only for the program's own "Update now"). The server files (Race Overlay) are already inside, in the `Server Files` folder.
 2. Unzip it anywhere (right click, *Extract All*; do not run it from inside the zip).
 3. Start **`UmaRaceOverlay.exe`**. No Python and no installer needed.
 
@@ -200,6 +200,6 @@ This is an unofficial fan project and is not affiliated with Cygames. It does no
 1. Change the code in `app/`, and add a `## X.Y.Z` section at the top of `CHANGELOG.md`.
 2. Run `./app/release.sh X.Y.Z` (Git Bash, WSL or Linux).
 
-That commits, tags `vX.Y.Z` and pushes. GitHub then builds the program on a Windows machine, runs `app/smoke_test.py`, and publishes `race-overlay-windows-X.Y.Z.zip` and `latest.json` as a Release, with the changelog text as the release notes. You can test the build without a release in the **Actions** tab (*Release*, *Run workflow*).
+That commits, tags `vX.Y.Z` and pushes. GitHub then builds the program on a Windows machine, runs `app/smoke_test.py`, and publishes `UmaRaceOverlay-Windows-X.Y.Z-DOWNLOAD-THIS.zip` and `latest.json` as a Release, with the changelog text as the release notes. You can test the build without a release in the **Actions** tab (*Release*, *Run workflow*).
 
 Run the headless test yourself: `pip install PyQt6 pillow` then `python app/smoke_test.py`.

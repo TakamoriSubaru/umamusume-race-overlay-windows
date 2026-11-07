@@ -5,7 +5,7 @@ For streamers who want the Uma Musume race tower and boards in OBS. No Python an
 ## 1. Download
 
 1. Open the **[latest release](../../releases/latest)**.
-2. Under **Assets**, click **`race-overlay-windows-X.Y.Z.zip`**. It has everything, including the server. (Do not click "Source code".)
+2. Under **Assets**, click **`UmaRaceOverlay-Windows-X.Y.Z-DOWNLOAD-THIS.zip`**. It has everything, including the server. (Do not click "Source code".)
 3. Right click the zip, **Extract All...**, and choose a folder such as `Documents`.
    Do not start the program from inside the zip.
 

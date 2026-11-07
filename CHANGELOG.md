@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.5
+
+- **Cup Score: share your races.** *Save the races as a file...* and *Add races from a file...* (Cup Score tab, Points counted by this program). If Phedro counts rounds 1 and 2 and you count round 3, he sends you his file and you add it. A race you both counted is only counted once.
+- **Player name option everywhere:** the Discord name / in-game name choice now also changes the names on the standings board (before it only changed the tower, the results board and the luck board).
+- **What's new window:** the first time you start a newer version, a small window lists what changed (once).
+- **Clear zip names:** the zip to download is now called `UmaRaceOverlay-Windows-X.Y.Z-DOWNLOAD-THIS.zip`. The other one is `...-auto-update-only.zip` (only the program's *Update now* button uses it), and the release page says which one to take.
+
 ## 2.0.4
 
 - **No uma is missing in People > Umas:** the list now starts with every uma and outfit of the game (from Race Overlay's umdb.json, plus every uma that has a picture), not only the ones you have seen in a race. A new *Add all umas* button adds them again if you add pictures later.

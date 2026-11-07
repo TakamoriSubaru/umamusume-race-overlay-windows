@@ -248,7 +248,7 @@ class StandingsBoard(ResultsBoard):
         uma = row.get("uma", "")
         top = QRectF(tx, y + (4 if uma else 0), name_w, 18 if uma else rh)
         p.drawText(top, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                   QFontMetrics(tf).elidedText(row["name"], Qt.TextElideMode.ElideRight, int(name_w)))
+                   QFontMetrics(tf).elidedText(ov.display_trainer(row["name"]), Qt.TextElideMode.ElideRight, int(name_w)))
         if uma:
             nf = ov.fnt(9.5)
             p.setFont(nf)

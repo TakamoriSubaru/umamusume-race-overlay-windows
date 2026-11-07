@@ -121,6 +121,41 @@ class ScoreBook:
                 a["last"] = int(r["points"]) if ri == len(self.races) - 1 else 0
         return rank_rows(list(acc.values()))
 
+    def export_races(self, path):
+        """Every counted race in one file, to send to a friend (Add races from a file...)."""
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"format": "uma-race-overlay-scores", "races": self.races}, f, indent=1, ensure_ascii=False)
+
+    def import_races(self, path):
+        """Adds the races of a file made by export_races. A race that is already counted (same id) is skipped,
+        so two friends who both saw round 2 never count it twice. Returns (added, skipped)."""
+        with open(path, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        incoming = d.get("races") if isinstance(d, dict) else None
+        if not isinstance(incoming, list):
+            raise ValueError("This is not a races file made by this program.")
+        have = {r.get("id") for r in self.races}
+        added = skipped = 0
+        for r in incoming:
+            ok = isinstance(r, dict) and isinstance(r.get("results"), list) and r["results"] and all(
+                isinstance(x, dict) and "name" in x and "points" in x for x in r["results"])
+            if not ok:
+                skipped += 1
+                continue
+            rid = r.get("id") or self.race_id(r["results"])
+            if rid in have:
+                skipped += 1
+                continue
+            have.add(rid)
+            self.races.append({"id": rid, "at": float(r.get("at") or 0), "title": str(r.get("title", "")),
+                               "results": [{"name": str(x["name"]), "uma": str(x.get("uma", "")), "place": int(x.get("place", 0)),
+                                            "time": str(x.get("time", "")), "points": int(x["points"])} for x in r["results"]]})
+            added += 1
+        if added:
+            self.races.sort(key=lambda r: r.get("at", 0))
+            self.save()
+        return added, skipped
+
     def export_csv(self, path):
         rows = self.totals()
         with open(path, "w", newline="", encoding="utf-8") as f:

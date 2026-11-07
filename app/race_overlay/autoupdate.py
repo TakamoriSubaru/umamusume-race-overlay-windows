@@ -27,6 +27,42 @@ class AutoUpdate:
     def start(self):
         self.timer.start(CHECK_EVERY_MS)
         QTimer.singleShot(FIRST_CHECK_MS, self.check)
+        QTimer.singleShot(3000, self.whats_new)
+
+    def whats_new(self):
+        """After an update (the first start of a newer version) show what changed, once."""
+        seen = str(self.ov.s.get("seen_version", ""))
+        if seen == APP_VERSION:
+            return
+        self.ov.set_setting("seen_version", APP_VERSION)
+        if not seen or version_tuple(seen) >= version_tuple(APP_VERSION):
+            return                                  # a fresh install, or an older version came back: nothing to announce
+        notes = ""
+        for folder in (SCRIPT_DIR, os.path.dirname(SCRIPT_DIR)):
+            try:
+                with open(os.path.join(folder, "CHANGELOG.md"), "r", encoding="utf-8") as f:
+                    lines = f.read().splitlines()
+            except OSError:
+                continue
+            take, out = False, []
+            for ln in lines:
+                if ln.strip() == "## " + APP_VERSION:
+                    take = True
+                    continue
+                if ln.startswith("## "):
+                    take = False
+                if take:
+                    out.append(ln.replace("**", ""))
+            notes = "\n".join(out).strip()
+            if notes:
+                break
+        box = QMessageBox(self.ov.dialog or self.ov)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle("Updated")
+        box.setText("<b>You now have version %s</b> (before: %s)." % (APP_VERSION, seen))
+        box.setInformativeText(("What's new:\n\n" + notes[:1500]) if notes else "Thanks for updating.")
+        box.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
+        box.exec()
 
     def spawn(self, fn, done, failed):
         self.jobs = [j for j in self.jobs if not j.isFinished()]
