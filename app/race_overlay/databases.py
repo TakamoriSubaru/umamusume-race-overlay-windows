@@ -23,6 +23,54 @@ class PlayersDB:
             self._mtime = os.path.getmtime(self.path)
         except Exception:
             self.data = {}
+            return
+        if self.merge_same():
+            self.save()
+
+    def merge_same(self):
+        """Rows that are the same person become one: the same picture file or the same Discord id.
+        The row with the most races stays; the other names are kept as aliases (so they still find him)."""
+        groups = {}
+        for k, e in self.data.items():
+            img = str(e.get("image") or "")
+            ids = []
+            if img and not img.lower().startswith(("http://", "https://")):
+                ids.append("img:" + img.lower())
+            if e.get("discord_id"):
+                ids.append("id:" + str(e["discord_id"]))
+            for i in ids:
+                groups.setdefault(i, []).append(k)
+        parent = {k: k for k in self.data}
+
+        def find(k):
+            while parent[k] != k:
+                parent[k] = parent[parent[k]]
+                k = parent[k]
+            return k
+        for keys in groups.values():
+            for k in keys[1:]:
+                parent[find(k)] = find(keys[0])
+        sets = {}
+        for k in self.data:
+            sets.setdefault(find(k), []).append(k)
+        changed = False
+        for keys in sets.values():
+            if len(keys) < 2:
+                continue
+            keys.sort(key=lambda k: (-int(self.data[k].get("seen", 0) or 0), 0 if self.data[k].get("discord_id") else 1))
+            keep = self.data[keys[0]]
+            aliases = list(keep.get("aliases", []))
+            for k in keys[1:]:
+                o = self.data.pop(k)
+                keep["seen"] = int(keep.get("seen", 0) or 0) + int(o.get("seen", 0) or 0)
+                for f in ("image", "last_uma", "last_seen", "club", "discord_id", "discord_name", "viewer_id"):
+                    if not keep.get(f) and o.get(f):
+                        keep[f] = o[f]
+                aliases += [k, o.get("discord_name", "")] + list(o.get("aliases", []))
+            low = keys[0].lower()
+            keep["aliases"] = [a for i, a in enumerate(aliases) if a and a.lower() != low and a not in aliases[:i]]
+            changed = True
+        return changed
 
     def reload_if_changed(self):
         try:

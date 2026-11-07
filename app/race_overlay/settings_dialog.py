@@ -2091,7 +2091,7 @@ class SettingsDialog(QDialog):
                 shown = "file: " + os.path.basename(img)
             races = QTableWidgetItem()
             races.setData(Qt.ItemDataRole.DisplayRole, int(d.get("seen", 0)))       # a number: sorts as a number
-            cells = (_NameItem(name), _NameItem(d.get("discord_name", "")),
+            cells = (_NameItem(name), _NameItem(d.get("discord_name") or (d.get("aliases") or [""])[0]),
                      _NameItem(str(d.get("discord_id", ""))), _NameItem(d.get("club", "")),
                      races, _NameItem(d.get("last_uma", "")), _NameItem(shown))
             for c, it in enumerate(cells):

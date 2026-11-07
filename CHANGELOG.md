@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.3
+
+- **Same person, one row:** rows that use the same picture file (or the same Discord id) are combined automatically, with the races added up. The other name still finds that player (for example *freakkiem* and *FREAK* become one row).
+
 ## 2.0.2
 
 - **Right outfit in the tower:** the picture and name now follow the outfit the uma *wears* in the race, not the card she was trained with. A Summer Special Week shows as Summer Special Week, and Kitasan Black in her New Year outfit shows as New Year.
