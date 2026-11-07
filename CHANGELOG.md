@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.4
+
+- **No uma is missing in People > Umas:** the list now starts with every uma and outfit of the game (from Race Overlay's umdb.json, plus every uma that has a picture), not only the ones you have seen in a race. A new *Add all umas* button adds them again if you add pictures later.
+
 ## 2.0.3
 
 - **Same person, one row:** rows that use the same picture file (or the same Discord id) are combined automatically, with the races added up. The other name still finds that player (for example *freakkiem* and *FREAK* become one row).

@@ -145,6 +145,21 @@ class ImageStore(QThread):
         path = find_file_ci(self.players, safe)
         return read_file(path) if path else b""
 
+    def all_cards(self):
+        """{card id: chara id} of every picture named chara_stand_<chara>_<card> on this computer."""
+        import re
+        pat = re.compile(r"chara_stand_(\d+)_(\d+)\.")
+        found = {}
+        for d in [self.uma] + self.extra_dirs:
+            try:
+                for n in os.listdir(d):
+                    m = pat.match(n)
+                    if m:
+                        found[int(m.group(2))] = int(m.group(1))
+            except OSError:
+                pass
+        return found
+
     def cards_of(self, chara_id):
         """Card ids of this uma that have a picture on this computer (images/uma, Race Overlay's character_thumbs)."""
         import re
@@ -292,7 +307,8 @@ def _import_player_pack(z, records_name, images_dir):
         if rec.get("club_name"):
             e["club"] = rec["club_name"]
             clubs.add(rec["club_name"])
-        e["aliases"] = [x for x in {disp, ingame} if x and x.lower() != key.lower()]   # other names he is seen under
+        e["aliases"] = [x for x in {disp, ingame, (rec.get("global_name") or "").strip(), (rec.get("username") or "").strip()}
+                        if x and x.lower() != key.lower()]   # other names he is seen under
         low[key.lower()] = key
         by_did[did] = key
         n += 1

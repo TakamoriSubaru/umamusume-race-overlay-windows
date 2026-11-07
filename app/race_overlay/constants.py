@@ -124,6 +124,7 @@ DEFAULT_SETTINGS = {
     "tower_header": "both",    # "both" = track info and clock, "clock" = clock only, "none"
     "players_only": False,     # tower: hide umas that have no trainer name (NPCs)
     "show_club": False,        # a small "· Club" after the uma line (clubs come from a player pictures zip)
+    "name_source": "ingame",   # which name of a player is shown: "ingame" (the trainer name of the race) or "discord" (his Discord name, from the pictures zip)
     "strip_tags": False,       # names: "CLUB｜Name" shows as "Name"
     "tower_team_color": True,  # tower: a team colour stripe for the players of a draft team
     "podium_1": "#d4a017",     # colour of 1st place (tower rank, results board)
@@ -244,7 +245,7 @@ THEME_PRESETS = {
 
 # the settings that make up "my look" (Save my look / Load a look in the Look tab)
 LOOK_KEYS = ("bg", "bg_opacity", "text_color", "sub_color", "accent", "text_scale", "font",
-             "header_scale", "header_font", "header_color", "racer_font", "racer_scale", "racer_color", "header_clock", "show_club", "podium_1", "podium_2", "podium_3", "picture_shape", "row_style", "pictures", "names",
+             "header_scale", "header_font", "header_color", "racer_font", "racer_scale", "racer_color", "header_clock", "show_club", "name_source", "podium_1", "podium_2", "podium_3", "picture_shape", "row_style", "pictures", "names",
              "board_header", "board_footer", "results_style", "results_columns", "results_winner")
 
 

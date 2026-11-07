@@ -113,6 +113,11 @@ class PlayersDB:
             self.save()
         return n
 
+    def discord_name_of(self, name):
+        """The Discord name of a trainer (from a player pictures zip), or ""."""
+        k = self.key_for(name or "")
+        return str((self.data.get(k) or {}).get("discord_name", "")) if k else ""
+
     def club_of(self, name):
         """The club of a trainer (from a player pictures zip), or ""."""
         k = self.key_for(name or "")
@@ -178,6 +183,19 @@ class UmasDB:
         e["chara_id"] = int(chara_id or e.get("chara_id", 0) or 0)
         e["seen"] = int(e.get("seen", 0)) + 1
         return new
+
+    def add_many(self, items):
+        """items: {card id: name}. Adds the umas that are not in the list yet; returns how many were new."""
+        n = 0
+        for card, name in items.items():
+            key = str(int(card))
+            if key in self.data:
+                continue
+            self.data[key] = {"name": name or "Uma %d" % (int(card) // 100), "chara_id": int(card) // 100, "seen": 0}
+            n += 1
+        if n:
+            self.save()
+        return n
 
     def add(self, card_id, name):
         self.touch(card_id, int(card_id) // 100, name)
@@ -267,6 +285,7 @@ class CardTitles:
 
     def load(self):
         self.titles = {}
+        self.charas = {}
         for path in self.paths_fn():
             try:
                 with open(path, "r", encoding="utf-8") as f:
@@ -274,10 +293,18 @@ class CardTitles:
                 cards = d.get("card") or []
                 self.titles = {int(c["id"]): str(c.get("name", "")).strip().strip("[]").strip()
                                for c in cards if isinstance(c, dict) and "id" in c}
+                self.charas = {int(c["id"]): str(c.get("name", "")).strip() for c in (d.get("chara") or [])
+                               if isinstance(c, dict) and "id" in c}
                 self.source = path
                 break
             except Exception:
                 continue
+
+    def all_cards(self):
+        """{card id: uma name} of every card in umdb.json (empty when the file is missing)."""
+        if self.titles is None:
+            self.load()
+        return {cid: self.charas.get(cid // 100, "") for cid in self.titles}
 
     def title(self, card_id):
         if self.titles is None:

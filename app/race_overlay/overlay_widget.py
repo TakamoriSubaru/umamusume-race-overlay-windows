@@ -914,6 +914,8 @@ class OverlayWidget(FramelessMixin, QWidget):
         """(headline, small line under it) for a row, following the 'Names' choice in the Look tab."""
         mode = self.s.get("names", "both")
         trainer = strip_club_tag(h.trainer) if self.s.get("strip_tags", False) else h.trainer
+        if self.s.get("name_source") == "discord":              # his Discord name, when the pictures zip had it
+            trainer = self.players.discord_name_of(h.trainer) or trainer
         club = self.players.club_of(h.trainer) if self.s.get("show_club", False) else ""
         if mode == "trainer" and trainer:
             return trainer, club

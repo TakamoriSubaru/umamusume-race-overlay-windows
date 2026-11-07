@@ -712,6 +712,8 @@ class SettingsDialog(QDialog):
                                         "Only when somebody in the race has a trainer name."))
         fg.addRow("Club", check("show_club", "Show each player's club under the name (from the pictures zip)", False,
                                 "The clubs come with the zip of player pictures (People > Players > Import pictures from a zip)."))
+        fg.addRow("Player name", combo("name_source", [("ingame", "In-game name (the trainer name)"), ("discord", "Discord name")],
+                                       "Discord names come from the pictures zip (People > Players). A player without one shows the in-game name."))
         fg.addRow("Club tags", check("strip_tags", "Show CLUB｜Name as Name", False,
                                      "Used in the tower, the results board and the skill luck board."))
         fg.addRow("Team colour", check("tower_team_color", "Stripe for the players of a draft team", True,
@@ -958,7 +960,7 @@ class SettingsDialog(QDialog):
         uv.addWidget(self.utable, 1)
         ubr = QHBoxLayout()
         for text, fn in (("Choose picture...", self.choose_uma_file), ("Use default face", self.remove_uma_pic),
-                         ("Add uma...", self.add_uma), ("Open folder", lambda: open_folder(ov.thumbs.uma))):
+                         ("Add uma...", self.add_uma), ("Add all umas", self.add_all_umas), ("Open folder", lambda: open_folder(ov.thumbs.uma))):
             b = QPushButton(text)
             if text.startswith("Choose"):
                 b.setObjectName("primary")
@@ -2229,8 +2231,27 @@ class SettingsDialog(QDialog):
                                 "privately. Do not put it on GitHub: the uma pictures are Cygames' art." % (n, path))
 
     # ---- uma pictures helpers
+    def add_all_umas(self, silent=False):
+        """Every uma of the game list (umdb.json) and every uma that has a picture here, so none is missing."""
+        ov = self.ov
+        items = dict(ov.outfits.titles.all_cards())
+        names = {}
+        for card, e in ov.umas.data.items():
+            names[int(e.get("chara_id") or int(card) // 100)] = e.get("name", "")
+        for card, chara in ov.thumbs.all_cards().items():
+            items.setdefault(card, names.get(chara) or ov.outfits.titles.charas.get(chara, "") or "Uma %d" % chara)
+        n = ov.umas.add_many(items)
+        if n or not silent:
+            self.refresh_umas()
+        if not silent:
+            QMessageBox.information(self, "Umas", "%d umas were added (%d in the list now).%s" % (
+                n, len(ov.umas.data), "" if items else "\n\nNo umdb.json and no uma pictures were found, so there was nothing to add."))
+
     def refresh_umas(self):
         ov = self.ov
+        if not getattr(self, "_umas_filled", False):          # the first time: put every known uma in the list
+            self._umas_filled = True
+            ov.umas.add_many({c: n for c, n in dict(ov.outfits.titles.all_cards()).items()})
         keep = None
         r = self.utable.currentRow()
         if r >= 0 and self.utable.item(r, 2):
