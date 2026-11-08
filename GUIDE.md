@@ -67,9 +67,9 @@ The program can write each player's placing into your Google Sheet after every r
 
 The script looks for the group of the race in the tab *Group Stage Round N* (Trainer / Placing columns) and fills the *Placing* cells that are still empty. A placing that is already there is never changed, and previews or old race files are never sent. If you change the script later, use **Deploy > Manage deployments > Edit > New version**, so the link stays the same. Keep the link and the secret code private.
 
-## 7c. Data - Skills (every skill of every uma)
+## 7c. Skills of every race (spreadsheet)
 
-The program saves the results and the skills of every real race on your computer (not previews or old files). In **Settings > Data - Skills** press **Save the last race (.xlsx)...** for one race (every skill, how many umas brought it and who), or **Save all races (.xlsx)...** for everything. The file of all races has four sheets: *Races*, *Runners*, *Skills* (one row per skill: equipped or not, the time and place in the race where it activated, its condition) and *Skill summary* (how often each skill was brought and activated). You can turn the saving off in the same box.
+The program saves the results and the skills of every real race on your computer (not previews or old files). In **Settings > Data** (the box *Skills of every race*) press **Save the last race (.xlsx)...** for one race (every skill, how many umas brought it and who), or **Save all races (.xlsx)...** for everything. The file of all races has four sheets: *Races*, *Runners*, *Skills* (one row per skill: equipped or not, the time and place in the race where it activated, its condition) and *Skill summary* (how often each skill was brought and activated). You can turn the saving off in the same box.
 
 ## 8. Update
 

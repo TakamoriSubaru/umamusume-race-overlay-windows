@@ -1,9 +1,14 @@
 # Changelog
 
+## 2.1.2
+
+- **Shorter update windows:** the *New version available* and *Updated* windows are small and list what changed in a few short lines.
+- **Skills spreadsheet in the Data tab:** the box *Skills of every race* (save the last race or all races as .xlsx) is now at the top of the *Data* tab instead of its own tab.
+
 ## 2.1.1
 
 - **Send placings to your Google Sheet:** after each real race the program can write every player's placing into the *Placing* column of the *Group Stage Round* tab (Cup Score tab, *Send placings to the Google Sheet*), and your own formulas count the points. It needs a small script in the sheet, which the program copies for you (steps in the GUIDE). A placing that is already in the sheet is never overwritten, and previews or old files are never sent.
-- **Race data for every race:** the program saves the results and every skill of every uma of each real race (the skills they brought, which ones activated, at what time and distance, and each skill's condition from Race Overlay's umdb.json). *Settings > Data - Skills > Save the last race (.xlsx)* lists every skill of one race with the number of umas that brought it and who (for example *A Kiss for Courage: 2, Varrukas, Phedro*). *Save all races (.xlsx)* makes a spreadsheet of everything with the sheets Races, Runners, Skills and Skill summary. Skills that the server does not list as equipped show "unknown" in the Equipped column.
+- **Race data for every race:** the program saves the results and every skill of every uma of each real race (the skills they brought, which ones activated, at what time and distance, and each skill's condition from Race Overlay's umdb.json). *Settings > Data > Skills of every race > Save the last race (.xlsx)* lists every skill of one race with the number of umas that brought it and who (for example *A Kiss for Courage: 2, Varrukas, Phedro*). *Save all races (.xlsx)* makes a spreadsheet of everything with the sheets Races, Runners, Skills and Skill summary. Skills that the server does not list as equipped show "unknown" in the Equipped column.
 - **Cup Score reads more sheets:** a tab with the table *Name / Round 1 / Round 2 / Round 3 / Total* (like *Final Rankings Calc*) now works too. The player column can be called *Member*, *Name* or *Player*, and the Round 1, Round 2, Round 3 and Overall views all read from that table.
 
 ## 2.0.5

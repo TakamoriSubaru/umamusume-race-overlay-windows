@@ -417,6 +417,7 @@ class SettingsDialog(QDialog):
         know.setWordWrap(True)
         wl.addWidget(know)
         rv.addWidget(wbox)
+        self._data_layout = rv                      # the skills box is added here (built with the Cup Score tab)
         rv.addStretch(1)
         tabs.addTab(self.scrolled(rt), "Data")
         self.update_source_label()
@@ -1297,7 +1298,7 @@ class SettingsDialog(QDialog):
         wl.addWidget(self.lbl_wstat)
         v.addWidget(wbox)
 
-        dbox = QGroupBox("Skills of every race")
+        dbox = QGroupBox("Skills of every race (for a spreadsheet)")
         dl = QVBoxLayout(dbox)
         self.cb_rdata = QCheckBox("Save the results and skills of every race")
         self.cb_rdata.setChecked(bool(s.get("race_data", True)))
@@ -1339,11 +1340,7 @@ class SettingsDialog(QDialog):
         self._stand_tab = sc
         self.update_book_label()
         tabs.addTab(sc, "Cup Score")
-        dt = QWidget()                              # its own tab, not part of the Cup Score
-        dv = QVBoxLayout(dt)
-        dv.addWidget(dbox)
-        dv.addStretch(1)
-        tabs.addTab(self.scrolled(dt), "Data - Skills")
+        self._data_layout.insertWidget(0, dbox)      # in the Data tab, at the top
         self.update_race_data_label()
 
     # ---- draft tab (team match)

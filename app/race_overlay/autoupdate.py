@@ -1,17 +1,65 @@
 """Tells you when a new version is out (checked on GitHub when the program starts) and installs it for you."""
 
 import os
+import re
 import sys
 import time
 
 from PyQt6.QtCore import QTimer, Qt
-from PyQt6.QtWidgets import QMessageBox, QProgressDialog
+from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QProgressDialog, QPushButton, QVBoxLayout
 
 from .constants import APP_VERSION, SCRIPT_DIR, FROZEN
 from .updater import (Job, check_update_files, download_update, fetch_manifest, install_update, version_tuple)
 
 CHECK_EVERY_MS = 6 * 60 * 60 * 1000      # and once more every 6 hours while the program stays open
 FIRST_CHECK_MS = 12 * 1000               # a few seconds after start, so the start-up is not slowed down
+
+
+def short_notes(text, limit=6, width=72):
+    """The release notes as a short list: the bold heading of every bullet of the changelog ("**Cup Score: share races.** ..."),
+    or the first words of a plain line. Returns at most `limit` lines of at most `width` letters."""
+    out = []
+    for ln in str(text or "").splitlines():
+        ln = ln.strip()
+        if not ln.startswith(("- ", "* ")):
+            continue
+        ln = ln[2:].strip()
+        m = re.match(r"\*\*(.+?)\*\*", ln)
+        head = m.group(1) if m else re.split(r"(?<=[.!?:])\s", ln, 1)[0]
+        head = re.sub(r"[*`_]", "", head).strip().rstrip(".:")
+        if head:
+            out.append(head if len(head) <= width else head[:width - 1].rstrip() + "...")
+    return out[:limit]
+
+
+def compact_box(parent, title, head, lines, buttons):
+    """A small window: one bold line, a short list, a row of buttons. Returns the text of the button pressed ('' = closed)."""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(title)
+    dlg.setMinimumWidth(330)
+    lay = QVBoxLayout(dlg)
+    lay.setSpacing(6)
+    lay.setContentsMargins(14, 12, 14, 12)
+    top = QLabel(head)
+    top.setWordWrap(True)
+    lay.addWidget(top)
+    if lines:
+        body = QLabel("<ul style='margin:0 0 0 -18px'>%s</ul>" % "".join("<li>%s</li>" % l.replace("&", "&amp;").replace("<", "&lt;") for l in lines))
+        body.setWordWrap(True)
+        lay.addWidget(body)
+    row = QHBoxLayout()
+    row.addStretch(1)
+    result = {"v": ""}
+    for i, text in enumerate(buttons):
+        b = QPushButton(text)
+        if i == 0:
+            b.setObjectName("primary")
+            b.setDefault(True)
+        b.clicked.connect(lambda _c=False, t=text: (result.__setitem__("v", t), dlg.accept()))
+        row.addWidget(b)
+    lay.addLayout(row)
+    dlg.exec()
+    return result["v"]
 
 
 class AutoUpdate:
@@ -56,13 +104,8 @@ class AutoUpdate:
             notes = "\n".join(out).strip()
             if notes:
                 break
-        box = QMessageBox(self.ov.dialog or self.ov)
-        box.setIcon(QMessageBox.Icon.Information)
-        box.setWindowTitle("Updated")
-        box.setText("<b>You now have version %s</b> (before: %s)." % (APP_VERSION, seen))
-        box.setInformativeText(("What's new:\n\n" + notes[:1500]) if notes else "Thanks for updating.")
-        box.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
-        box.exec()
+        compact_box(self.ov.dialog or self.ov, "Updated", "<b>Updated to version %s</b> <span style='color:gray'>(was %s)</span>" % (APP_VERSION, seen),
+                    short_notes(notes) or ["Thanks for updating."], ["OK"])
 
     def spawn(self, fn, done, failed):
         self.jobs = [j for j in self.jobs if not j.isFinished()]
@@ -102,19 +145,12 @@ class AutoUpdate:
     def ask(self, m):
         ver = str(m.get("version", ""))
         notes = str(m.get("notes", "")).strip()
-        box = QMessageBox(self.ov.dialog or self.ov)
-        box.setIcon(QMessageBox.Icon.Information)
-        box.setWindowTitle("New version available")
-        box.setText("<b>Version %s is out</b> (you have %s)." % (ver, APP_VERSION))
-        box.setInformativeText("Update now? The program closes and starts again by itself.\n"
-                               "Your settings and pictures are kept." + ("\n\n" + notes[:1200] if notes else ""))
-        yes = box.addButton("Update now", QMessageBox.ButtonRole.AcceptRole)
-        box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
-        skip = box.addButton("Skip this version", QMessageBox.ButtonRole.DestructiveRole)
-        box.exec()
-        if box.clickedButton() is yes:
+        pick = compact_box(self.ov.dialog or self.ov, "New version available",
+                           "<b>Version %s is out</b> <span style='color:gray'>(you have %s)</span>" % (ver, APP_VERSION),
+                           short_notes(notes), ["Update now", "Later", "Skip this version"])
+        if pick == "Update now":
             self.install(m)
-        elif box.clickedButton() is skip:
+        elif pick == "Skip this version":
             self.ov.set_setting("update_skip", ver)
 
     def install(self, m):
