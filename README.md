@@ -96,9 +96,15 @@ Skill names come from Race Overlay's `umdb.json`. A race saved twice counts once
 
 ---
 
-## 🧩 Simple version
+## 🧩 Three versions: Tower, Advanced, Tournament
 
-Tick **Simple version** at the top of the Home tab (or pick it in the first-start guide). You get only the **tower**, **People** and **Look** (and Help). The results, standings, luck and match boards, the points, the Draft and the Data tab are hidden. Untick it to get everything back.
+The first time you start the program, a guide asks which version you want and then takes you through a short tutorial (start the game, preview, OBS, the boards). You can change the version any time with **Version** at the top of the Home tab, and start the tutorial again with **Setup guide and tutorial** (Home tab, More).
+
+| Version | What you get |
+| --- | --- |
+| **Tower** | Only the race tower. Only the Home, Look and People tabs (and Help). A small menu. |
+| **Advanced** | The tower, the results board and the skill luck board. No points. |
+| **Tournament** | Everything: results, luck and standings boards, points (also from your Google Sheet), Cup Score, the team match (draft) and the Data tab. |
 
 ---
 

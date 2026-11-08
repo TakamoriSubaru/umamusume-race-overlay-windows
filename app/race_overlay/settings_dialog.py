@@ -114,8 +114,10 @@ class SettingsDialog(QDialog):
         icon_path = os.path.join(SCRIPT_DIR, "icon.png")
         if os.path.isfile(icon_path):
             self.setWindowIcon(QIcon(icon_path))
-        simple = bool(ov.s.get("simple_mode"))
-        self.resize(500, 520) if simple else self.resize(720, 780)       # the simple version is a small window
+        level = ov.level()
+        simple = level == "tower"                  # the Tower version is a small window
+        limited = level != "tournament"              # Tower and Advanced: no points, standings, match
+        self.resize(500, 520) if simple else self.resize(720, 780)
         self.setStyleSheet(build_theme_qss())
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 16, 16, 14)
@@ -134,12 +136,18 @@ class SettingsDialog(QDialog):
         self.lbl_state.setWordWrap(True)
         self.lbl_state.setStyleSheet("font-size:15px;")
         mv.addWidget(self.lbl_state)
-        self.cb_simple = QCheckBox("Simple version: only the tower, People and Look")
-        self.cb_simple.setChecked(simple)
-        self.cb_simple.setToolTip("Hides the results, standings, luck and match boards, the points, the Draft and the extra tabs. "
-                                  "Turn it off to get everything back.")
-        self.cb_simple.toggled.connect(ov.set_simple_mode)
-        mv.addWidget(self.cb_simple)
+        vrow = QHBoxLayout()
+        vrow.addWidget(QLabel("Version:"))
+        self.cmb_level = QComboBox()
+        for key, text in (("tower", "Tower (just the tower)"), ("advanced", "Advanced (tower, results, luck board)"),
+                          ("tournament", "Tournament (everything)")):
+            self.cmb_level.addItem(text, key)
+        self.cmb_level.setCurrentIndex(self.cmb_level.findData(level))
+        self.cmb_level.setToolTip("Tower: only the tower, People and Look. Advanced: plus the results and skill luck boards. "
+                                  "Tournament: everything, including points, standings and the team match.")
+        self.cmb_level.activated.connect(lambda _i: ov.set_level(self.cmb_level.currentData()))
+        vrow.addWidget(self.cmb_level, 1)
+        mv.addLayout(vrow)
 
         sbx = QGroupBox("Setup")
         sbl = QVBoxLayout(sbx)
@@ -172,7 +180,7 @@ class SettingsDialog(QDialog):
         self.btn_setup.clicked.connect(lambda: ov.apply_setup(self.cmb_setup.currentData()))
         on_setup_changed()
         mv.addWidget(sbx)
-        sbx.setVisible(not simple)
+        sbx.setVisible(not limited)
 
         qs = Collapsible("Quick start (3 steps)", open_=bool(ov.s.get("quick_start_open", True)),
                          on_toggle=lambda on: ov.set_setting("quick_start_open", on))
@@ -227,9 +235,16 @@ class SettingsDialog(QDialog):
         place.body_l.addWidget(bx)
         mv.addWidget(place)
         place.setVisible(not simple)
+        if limited:                                  # Advanced has the results and luck board only
+            for btn in (self.btn_stand, self.btn_match):
+                btn.setVisible(False)
 
         more = Collapsible("More: start-up, picture folders, updates")
         mm = more.body_l
+        bg = QPushButton("Setup guide and tutorial...")
+        bg.setToolTip("Choose Tower, Advanced or Tournament and go through the steps.")
+        bg.clicked.connect(ov.show_welcome)
+        mm.addWidget(bg)
         self.cb_menu = QCheckBox("Open this menu when the program starts")
         self.cb_menu.setChecked(bool(ov.s.get("open_menu", True)))
         self.cb_menu.toggled.connect(lambda on: ov.set_setting("open_menu", on))
@@ -941,9 +956,10 @@ class SettingsDialog(QDialog):
         tabs.addTab(stt, "Help")
         self._tabs = tabs
         self._status_tab = stt
-        if simple:                                   # the simple version: Home, Look, People and Help only
+        if limited:                                  # Tower: Home, Look, People, Help. Advanced: also Data
+            hidden = ("Data", "Cup Score", "Draft") if simple else ("Cup Score", "Draft")
             for i in range(tabs.count()):
-                if tabs.tabText(i).replace(" (WIP)", "") in ("Data", "Cup Score", "Draft"):
+                if tabs.tabText(i).replace(" (WIP)", "") in hidden:
                     tabs.setTabVisible(i, False)
         tabs.currentChanged.connect(lambda _i: self.refresh_status() if tabs.currentWidget() is stt else None)
         self.refresh_umas()

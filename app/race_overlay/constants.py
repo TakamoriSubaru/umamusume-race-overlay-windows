@@ -149,7 +149,8 @@ DEFAULT_SETTINGS = {
     "font": "",                # "" = default font
     # --- saved races (Data tab) - these are NOT touched by "Reset look to defaults"
     "saved_races_dir": "",     # the folder you last picked race files from (for the file windows)
-    "simple_mode": False,      # the easy version: only the tower, People and Look
+    "simple_mode": False,      # (kept in step with level) True for the Tower version
+    "level": "",               # "tower", "advanced" or "tournament" ("" = tournament: everything)
     # --- when the overlay shows
     "auto_hide": True,         # window is hidden until a race starts, hidden again after it
     "slide": "auto",           # slide in from: "auto" (the side the window is on), "left", "right", "off"
@@ -216,7 +217,7 @@ DEFAULT_SETTINGS = {
 }
 
 
-KEEP_ON_RESET = ("simple_mode", "saved_races_dir", "auto_hide",
+KEEP_ON_RESET = ("simple_mode", "level", "saved_races_dir", "auto_hide",
                  "update_url", "auto_update_check", "update_skip", "seen_version",
                  "race_data", "sheet_write_url", "sheet_write_secret", "sheet_write_round", "sheet_write_auto", "open_menu", "stop_server", "show_overlay", "results_board", "results_seconds", "default_faces",
                  "scoring", "standings_board", "standings_mode", "standings_sheet", "standings_tab",

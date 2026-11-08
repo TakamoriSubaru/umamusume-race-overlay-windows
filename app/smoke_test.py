@@ -70,12 +70,27 @@ def fake_exec():
     for st in SETUPS:
         w.apply_setup(st["key"], rebuild=False)
 
-    w.set_simple_mode(True)                              # the simple version: Home, Look, People, Help only
+    def tabs_now():
+        return [w.dialog._tabs.tabText(i) for i in range(w.dialog._tabs.count()) if w.dialog._tabs.isTabVisible(i)]
+    w.set_level("tower")                                 # Tower: Home, Look, People, Help only
     pump(0.3)
-    shown = [w.dialog._tabs.tabText(i) for i in range(w.dialog._tabs.count()) if w.dialog._tabs.isTabVisible(i)]
-    assert shown == ["Home", "Look", "People", "Help"], shown
-    w.set_simple_mode(False)
+    assert tabs_now() == ["Home", "Look", "People", "Help"], tabs_now()
+    w.set_level("advanced")                              # Advanced: results and luck board, no points
     pump(0.3)
+    assert "Data" in tabs_now() and "Cup Score" not in tabs_now(), tabs_now()
+    assert w.s["results_board"] and w.s["luck_board"] and not w.s["scoring"]
+    w.set_level("tournament")
+    pump(0.3)
+    assert "Cup Score" in tabs_now(), tabs_now()
+    for lv, n in (("tower", 5), ("advanced", 6), ("tournament", 8)):      # the tutorial of every version
+        w.show_welcome()
+        w.welcome.choose(lv)
+        assert len(w.welcome.steps) == n, (lv, len(w.welcome.steps))
+        for i in range(n):
+            w.welcome.go(i)
+            assert not w.welcome.grab().isNull()
+        w.welcome.close()
+    w.set_level("tournament", rebuild=False)
 
     entries, footer = w.sample_results()                 # every board, with made-up data
     w.board.set_pinned(True, (entries, footer))

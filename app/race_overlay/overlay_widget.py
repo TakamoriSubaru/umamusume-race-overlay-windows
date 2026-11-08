@@ -1191,7 +1191,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self._tray_timer = QTimer(self)
         self._tray_timer.timeout.connect(self.refresh_tray)
         self._tray_timer.start(1000)
-        self.apply_tray_simple()
+        self.apply_tray_level()
         return True
 
     def on_tray_click(self, reason):
@@ -1391,22 +1391,35 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.board.update()
         self.update()
 
-    def set_simple_mode(self, on):
-        """The easy version: only the tower, People and Look. Every board and the points go off."""
-        on = bool(on)
-        self.set_setting("simple_mode", on)
-        if on:
-            self.apply_setup("tower", rebuild=False)
-        self.apply_tray_simple()
-        QTimer.singleShot(0, lambda: self.rebuild_settings("Home"))
+    def level(self):
+        """"tower", "advanced" or "tournament" (everything). Older settings only know simple_mode."""
+        lv = self.s.get("level") or ""
+        if lv in ("tower", "advanced", "tournament"):
+            return lv
+        return "tower" if self.s.get("simple_mode") else "tournament"
 
-    def apply_tray_simple(self):
-        """In the simple version the tray menu has no board entries."""
-        simple = bool(self.s.get("simple_mode"))
+    def set_level(self, level, apply=True, rebuild=True):
+        """Tower = tower only. Advanced = tower, results and luck board. Tournament = everything.
+        Going to Tower or Advanced also switches the boards that do not belong there off."""
+        if level not in ("tower", "advanced", "tournament"):
+            level = "tournament"
+        self.set_setting("level", level)
+        self.set_setting("simple_mode", level == "tower")
+        if apply and level != "tournament":
+            self.apply_setup(level, rebuild=False)
+        self.apply_tray_level()
+        if rebuild:
+            QTimer.singleShot(0, lambda: self.rebuild_settings("Home"))
+
+    def apply_tray_level(self):
+        """The tray menu only lists the boards that belong to the version."""
+        lv = self.level()
+        hide = {"tower": ("act_board", "act_stand", "act_stand_now", "act_luck", "act_match"),
+                "advanced": ("act_stand", "act_stand_now", "act_match")}.get(lv, ())
         for name in ("act_board", "act_stand", "act_stand_now", "act_luck", "act_match"):
             act = getattr(self, name, None)
             if act is not None:
-                act.setVisible(not simple)
+                act.setVisible(name not in hide)
 
     def apply_setup(self, key, tower_style=None, rebuild=True):
         """A ready-made setup (see setups.py): switches the right boards on and the others off."""

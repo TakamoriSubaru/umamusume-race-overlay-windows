@@ -1,6 +1,6 @@
 # Install and use guide (Windows)
 
-For streamers who want the Uma Musume race tower and boards in OBS. No Python and no installer needed.
+For tournaments who want the Uma Musume race tower and boards in OBS. No Python and no installer needed.
 
 ## 1. Download
 

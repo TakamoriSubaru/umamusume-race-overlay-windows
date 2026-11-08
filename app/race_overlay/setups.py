@@ -14,6 +14,9 @@ SETUPS = [
     {"key": "results", "title": "Tower and results",
      "blurb": "The tower, then a results board with the final places and times.",
      "settings": dict(_OFF, results_board=True), "tab": "Home"},
+    {"key": "advanced", "title": "Advanced: tower, results and luck board",
+     "blurb": "The tower, then the results board and the skill luck board together. No points.",
+     "settings": dict(_OFF, results_board=True, luck_board=True, luck_when="with"), "tab": "Home"},
     {"key": "points", "title": "Points for every player",
      "blurb": "Results board, then a standings board. Every race gives points; the standings add them up. "
               "Can also read your own Google Sheet (Cup Score tab).",

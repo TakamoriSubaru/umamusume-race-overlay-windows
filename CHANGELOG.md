@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.3.0
+
+- **Pick your version and get a tutorial:** the first start now asks *Tower* (just the tower), *Advanced* (tower, results board and skill luck board) or *Tournament* (everything), then walks you through a short tutorial: start the game, preview, OBS, the boards, points, Look and People. Change the version any time with *Version* at the top of the Home tab, and open the tutorial again with *Setup guide and tutorial* (Home tab, More).
+- Advanced hides the points, standings, match board, Cup Score and Draft. Tower also hides the Data tab and every board.
+
 ## 2.2.1
 
 - **Simple version is slimmer:** the menu is a small window with only what you need (status, show overlay, preview, Look, People, Help). The quick start box is hidden.
