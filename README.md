@@ -34,7 +34,7 @@ Windows may say *Windows protected your PC* because the program is not signed. C
 A **welcome guide** asks what you want to show: *Just the tower*, *Tower and results*, *Points for every player*, *Team match (draft)* or *Everything at once*, and the tower size (full or small corner). It switches the right boards on and lists what to do next. You can change it any time in the **Home tab, Setup**. Colours, fonts, window position and folders are never changed by a setup.
 
 1. Put the original **Race Overlay** folder (the one with `Race Overlay.exe`) in your Documents, Downloads or Desktop folder. The overlay finds it, starts its server once Uma Musume is running (and again until the server has found the game), and closes it when you quit. Somewhere else? Choose the folder in **Home tab, More**. If it is missing, the overlay keeps looking and the **Help tab** says so.
-2. Start Uma Musume. The dot in the Home tab turns green when everything is ready. For saved races instead of live data, choose the folder in the **Race data** tab.
+2. Start Uma Musume. The dot in the Home tab turns green when everything is ready.
 3. Press **Show preview race** to see the tower with made-up umas.
 
 > Race Overlay is a separate community program. It is **not** included here and this project never changes or redistributes it.
@@ -66,7 +66,6 @@ Add them after the path in the shortcut's *Target*.
 | `--show` | Show the overlay window at start |
 | `--no-tray` | No tray icon, the overlay is always shown |
 | `--no-game-link` | Do not wait for or follow Uma Musume |
-| `--watch FOLDER` | Saved races from this folder |
 | `--demo FILE` | Replay a saved race |
 | `--hold` | Keep the tower and boards until the next race |
 | `--version` | Print the version |
@@ -85,22 +84,21 @@ Add them after the path in the shortcut's *Target*.
 The **Help tab** in the settings runs a few checks (is the game running, is Race Overlay found, is its server answering) and shows the program's log.
 
 ---
-## 📂 Saved races folder
+## 📊 Skills spreadsheet
 
-Open the **Menu** and go to the **Races** tab:
+Open the **Data** tab and press **Choose race files...** (or **Choose a folder...**; the folders inside are searched too). Pick your own race files (horseACT `.json`). The program makes a spreadsheet (.xlsx) of the skills every uma **brought** (not the ones that activated), with the skill level:
 
-1. **Where do the races come from?** Choose *Live* (exact, from Race Overlay), *Saved races* (read the race files from a folder), or *Follow the start choice* (the default: live data when Race Overlay's server is found).
-2. **Saved races folder:** press **Browse...** and choose your main folder, for example `Documents/Saved races`. Keep **Also look in the folders inside it** ticked if your files are sorted into folders such as *Career*, *Champions meeting*, *Room match* or *Team trials*.
-3. The window shows how many `.json` files it found. Changing the folder works at once while the program runs. Changing the source asks you to restart.
+- **Who has what:** one row per uma with all its skills.
+- **Skill counts:** for every skill how many umas brought it and who (for example *A Kiss for Courage: 2, Varrukas, Phedro*).
+- **All skills:** one row per skill per uma, to filter in Excel or Google Sheets.
 
-Good to know:
-
-- The choice made in Settings is saved in `%APPDATA%\race-overlay-native\config.json`.
-- Files that are not races (for example a list of veterans) are skipped automatically.
-- "Reset look to defaults" does **not** reset your folder or source.
-- A race file is written when the race **loads**, not when it starts. The overlay therefore waits **Start delay** seconds (Data tab, default 12) after it sees a new file before it slides in. If it appears too early, make the delay bigger; too late, smaller. The arrow keys in the overlay window fine-tune it (0.25 s left / right, 1 s down / up). A saved file cannot tell how long you stay on the line-up screen, so this is always an estimate. **Live** mode is exact.
+Skill names come from Race Overlay's `umdb.json`. A race saved twice counts once. The races you play live are kept too (switch it off in the same box) and have their own button.
 
 ---
+
+## 🧩 Simple version
+
+Tick **Simple version** at the top of the Home tab (or pick it in the first-start guide). You get only the **tower**, **People** and **Look** (and Help). The results, standings, luck and match boards, the points, the Draft and the Data tab are hidden. Untick it to get everything back.
 
 ---
 
@@ -111,7 +109,7 @@ Good to know:
 - **Placing the window:** open the Menu and press **Show overlay window (to place it)**. Drag it where you want it, then press the button again. The position is remembered.
 - **Old behaviour:** untick **Hide the window until a race starts** in the *Look* tab. Without a tray icon the window is always shown, because you could not get it back.
 - **In OBS:** the *Window Capture* source is empty while the window is hidden and picks the window up again when it appears. For a clean slide (the tower sliding over your video and not over a dark box), start with `--chroma` and add a **Chroma Key** filter.
-- **Live vs saved races:** in *live* mode the window appears exactly when the real race clock starts. With *saved races* the start is calculated, see [Saved races folder](#-saved-races-folder).
+- **Timing:** the window appears exactly when the real race clock starts (it follows the Race Overlay server, no timers).
 
 ---
 

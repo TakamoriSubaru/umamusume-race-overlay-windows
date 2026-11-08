@@ -43,7 +43,7 @@ from .setups import get_setup
 from .scoring import ScoreBook, norm_name, points_for, strip_club_tag
 from .settings_dialog import SettingsDialog
 from .simdata import parse_sim
-from .sources import TestReplayThread, WatchThread, choose_source
+from .sources import TestReplayThread
 from .luck import luck_table, pick, skill_ids
 from .luck_board import LuckBoard
 from .match import Match
@@ -105,7 +105,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         if args.on_top:
             self.s["on_top"] = True
         self.dialog = None
-        self.source_kind = "live"      # set by main(): "live", "watch" or "demo"
+        self.source_kind = "live"      # set by main(): "live" or "demo"
         self.tray = None
         self.tray_active = False
         self.slide = 0.0               # 0 = tower is out of the window, 1 = fully slid in
@@ -247,7 +247,6 @@ class OverlayWidget(FramelessMixin, QWidget):
         self._signal_tick.timeout.connect(lambda: None)
         self.autoupdate.start()                      # a few seconds later: is there a new version?
         source.offset = float(self.cfg.get("sync_offset", 0.0))
-        source.delay = float(self.s.get("start_delay", 12.0))
         source.start()
 
     def on_status(self, text):
@@ -1161,7 +1160,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.act_board = m.addAction("Show results board (to place it)", lambda: self.set_board_pinned(not self.board.pinned))
         self.act_stand = m.addAction("Show standings board (to place it)",
                                      lambda: self.set_standings_pinned(not self.standings.pinned))
-        m.addAction("Show / hide the standings now", self.show_standings_now)
+        self.act_stand_now = m.addAction("Show / hide the standings now", self.show_standings_now)
         self.act_luck = m.addAction("Show skill luck board (to place it)",
                                     lambda: self.set_luck_pinned(not self.luck.pinned))
         self.act_match = m.addAction("Show match board (to place it)",
@@ -1192,6 +1191,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self._tray_timer = QTimer(self)
         self._tray_timer.timeout.connect(self.refresh_tray)
         self._tray_timer.start(1000)
+        self.apply_tray_simple()
         return True
 
     def on_tray_click(self, reason):
@@ -1354,8 +1354,6 @@ class OverlayWidget(FramelessMixin, QWidget):
                 self.refit_rows_now()
         if key in ("max_rows", "tower_header", "players_only", "header_scale"):
             self.fit_to_rows()
-        if key == "start_delay" and getattr(self, "source", None) is not None:
-            self.source.delay = float(value)
         if key == "auto_hide":
             self.sync_window_visibility()
         self.board.update()
@@ -1382,18 +1380,6 @@ class OverlayWidget(FramelessMixin, QWidget):
             self.show()  # changing window flags hides the window, so show it again
         self.setGeometry(geo)
 
-    def apply_source_choice(self):
-        """Use the source / saved-races folder chosen in Settings.
-        Returns True when it is active now, False when the program has to restart first."""
-        kind, folder = choose_source(self.args, self.s, self.cfg)
-        if kind == "watch" and self.source_kind == "watch" and isinstance(self.source, WatchThread):
-            self.source.set_folder(folder, bool(self.s.get("watch_subfolders", True)))
-            if folder:
-                self.cfg["watch_dir"] = folder
-                save_config(self.cfg)
-            return True
-        return kind == self.source_kind
-
     def reset_settings(self):
         keep ={k: self.s.get(k, DEFAULT_SETTINGS[k]) for k in KEEP_ON_RESET}
         self.s = dict(DEFAULT_SETTINGS)
@@ -1404,6 +1390,23 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.fit_to_rows()
         self.board.update()
         self.update()
+
+    def set_simple_mode(self, on):
+        """The easy version: only the tower, People and Look. Every board and the points go off."""
+        on = bool(on)
+        self.set_setting("simple_mode", on)
+        if on:
+            self.apply_setup("tower", rebuild=False)
+        self.apply_tray_simple()
+        QTimer.singleShot(0, lambda: self.rebuild_settings("Home"))
+
+    def apply_tray_simple(self):
+        """In the simple version the tray menu has no board entries."""
+        simple = bool(self.s.get("simple_mode"))
+        for name in ("act_board", "act_stand", "act_stand_now", "act_luck", "act_match"):
+            act = getattr(self, name, None)
+            if act is not None:
+                act.setVisible(not simple)
 
     def apply_setup(self, key, tower_style=None, rebuild=True):
         """A ready-made setup (see setups.py): switches the right boards on and the others off."""
@@ -1789,6 +1792,7 @@ class OverlayWidget(FramelessMixin, QWidget):
                                                   "Race files (*.json);;All files (*)")
         if not path:
             return
+        self.s["saved_races_dir"] = os.path.dirname(path)
         if self.preview:
             self.set_preview(False)
         if self.test_thread is not None and self.test_thread.isRunning():

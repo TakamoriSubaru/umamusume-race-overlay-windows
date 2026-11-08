@@ -7,7 +7,6 @@ import time
 from urllib.parse import urlparse
 
 from .constants import IS_WINDOWS, SCRIPT_DIR, TMP_DIR
-from .sources import count_race_files
 from .util import process_running
 
 # The log files the start scripts write.
@@ -97,20 +96,6 @@ def _search_folders(home):
     return os.path.realpath(found) if found else None
 
 
-_COUNT_CACHE = {}
-
-
-def _cached_count(folder, subfolders, max_age=10.0):
-    """count_race_files can be slow for a big folder, so the result is reused for a few seconds."""
-    key = (folder, subfolders)
-    hit = _COUNT_CACHE.get(key)
-    if hit and time.monotonic() - hit[0] < max_age:
-        return hit[1]
-    res = count_race_files(folder, subfolders)
-    _COUNT_CACHE[key] = (time.monotonic(), res)
-    return res
-
-
 def run_checks(ov):
     """[(state, title, hint)] with state "ok", "bad", "warn" or "info"."""
     out = []
@@ -142,15 +127,6 @@ def run_checks(ov):
                                        if IS_WINDOWS else
                                        "Put the folder with 'Race Overlay.exe' next to the app folder "
                                        "or set RACE_OVERLAY_DIR in settings.sh."))))
-    elif kind == "watch":
-        folder = ov.s.get("saved_races_dir") or getattr(getattr(ov, "source", None), "folder", "") or ""
-        if folder and os.path.isdir(folder):
-            races, files = _cached_count(folder, bool(ov.s.get("watch_subfolders", True)))
-            out.append(("ok" if races else "warn", "Saved races folder: %s (%d races)" % (folder, races),
-                        "" if races else "No race files in it yet."))
-        else:
-            out.append(("bad", "Saved races folder not found: %s" % (folder or "(none chosen)"),
-                        "Choose it in the Data tab."))
     else:
         out.append(("info", "Source: %s" % kind, ""))
         if IS_WINDOWS:

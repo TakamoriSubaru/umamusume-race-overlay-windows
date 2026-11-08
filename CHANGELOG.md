@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.0
+
+- **Skills spreadsheet from your own race files:** *Data tab > Choose race files... / Choose a folder...* makes a spreadsheet of the skills every uma **brought** (with the level): *Who has what*, *Skill counts* (for example A Kiss for Courage: 2, and who) and *All skills*. The races you play live are kept too, with their own button. The old activated-skills spreadsheets are gone.
+- **Always live, no more timers:** the *saved races* mode, its folder choice and the *Start delay* are removed. The overlay always follows the real race clock from Race Overlay's server, so it starts exactly when the race starts. A start script that still says `--watch` simply uses live mode.
+- **Simple version:** tick *Simple version* at the top of the Home tab (or pick it in the first-start guide) and you get only the tower, People and Look (and Help). The boards, points, Draft and Data tab are hidden.
+
 ## 2.1.2
 
 - **Shorter update windows:** the *New version available* and *Updated* windows are small and list what changed in a few short lines.

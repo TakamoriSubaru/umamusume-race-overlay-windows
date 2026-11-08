@@ -148,10 +148,8 @@ DEFAULT_SETTINGS = {
     "text_scale": 1.0,
     "font": "",                # "" = default font
     # --- saved races (Data tab) - these are NOT touched by "Reset look to defaults"
-    "source": "",              # "" = follow the start script, "live" = Race Overlay server, "watch" = saved races folder
-    "saved_races_dir": "",     # folder with your saved race JSON files (empty = the one from settings.sh / --watch)
-    "watch_subfolders": True,  # also look inside the folders below it (Career, Room match, ...)
-    "start_delay": 12.0,       # saved races: seconds from "race file saved" to "gates open"
+    "saved_races_dir": "",     # the folder you last picked race files from (for the file windows)
+    "simple_mode": False,      # the easy version: only the tower, People and Look
     # --- when the overlay shows
     "auto_hide": True,         # window is hidden until a race starts, hidden again after it
     "slide": "auto",           # slide in from: "auto" (the side the window is on), "left", "right", "off"
@@ -218,7 +216,7 @@ DEFAULT_SETTINGS = {
 }
 
 
-KEEP_ON_RESET = ("source", "saved_races_dir", "watch_subfolders", "start_delay", "auto_hide",
+KEEP_ON_RESET = ("simple_mode", "saved_races_dir", "auto_hide",
                  "update_url", "auto_update_check", "update_skip", "seen_version",
                  "race_data", "sheet_write_url", "sheet_write_secret", "sheet_write_round", "sheet_write_auto", "open_menu", "stop_server", "show_overlay", "results_board", "results_seconds", "default_faces",
                  "scoring", "standings_board", "standings_mode", "standings_sheet", "standings_tab",

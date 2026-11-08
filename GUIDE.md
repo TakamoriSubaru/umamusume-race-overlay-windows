@@ -15,7 +15,7 @@ For streamers who want the Uma Musume race tower and boards in OBS. No Python an
 
 The overlay reads live race data from the separate community tool **Race Overlay** (not included here).
 Put its folder (the one with `Race Overlay.exe` and `resources`) **next to `UmaRaceOverlay.exe`**, or in your **Documents**, **Downloads** or **Desktop** folder. The overlay finds it in a few seconds (no restart) and starts its server when Uma Musume runs. The Help tab says what it sees.
-Without it you can still use saved race files (see step 5).
+Without it the overlay gets no live race data.
 
 ## 3. Start it
 
@@ -39,7 +39,7 @@ Black or solid background in OBS? Start the program with `--chroma` (right click
 
 1. Start **Uma Musume**. The overlay waits for it and starts Race Overlay's server by itself. The dot in the Home tab turns **green** when it is ready.
 2. Run a race. The tower slides in, then the boards after the race.
-3. No Race Overlay? Choose your saved races folder in the **Race data** tab instead.
+3. Want only the tower? Tick **Simple version** at the top of the Home tab.
 
 Use *Windowed* or *Borderless windowed* in the game's graphics settings. A true fullscreen game hides windows that stay on top.
 

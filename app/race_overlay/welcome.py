@@ -42,10 +42,18 @@ class WelcomeDialog(QDialog):
                        "boards on, and you can change it any time in the Home tab.")
         intro.setWordWrap(True)
         v.addWidget(intro)
+        b0 = QPushButton("Simple version: just the tower  (easiest)")
+        b0.setObjectName("primary")
+        b0.clicked.connect(lambda _c=False: self.choose("tower", simple=True))
+        v.addWidget(b0)
+        d0 = QLabel("Only the tower, People and Look. No results, luck or standings boards and no points. "
+                    "You can switch to the full version any time in the Home tab.")
+        d0.setWordWrap(True)
+        d0.setContentsMargins(10, 0, 10, 4)
+        v.addWidget(d0)
         for st in SETUPS:
             b = QPushButton(st["title"])
             if st["key"] == "results":
-                b.setObjectName("primary")
                 b.setText(st["title"] + "  (most people)")
             b.clicked.connect(lambda _c=False, k=st["key"]: self.choose(k))
             v.addWidget(b)
@@ -83,7 +91,7 @@ class WelcomeDialog(QDialog):
         steps = QLabel("<b>1.</b> Press <i>Show preview race</i> to see the tower with made-up umas.<br>"
                        "<b>2.</b> Press <i>Show overlay window</i> (Home tab) so OBS can see it.<br>"
                        "<b>3.</b> In OBS add a <i>Window Capture (" + "Windows 10 1903 and up" + ")</i> source and pick "
-                       "<i>" + APP_NAME + "</i>. Boards are separate windows: add them the same way.<br>"
+                       "<i>" + APP_NAME + "</i>. Boards (if you use any) are separate windows: add them the same way.<br>"
                        "<b>4.</b> Start Uma Musume. The overlay waits for it and shows a green dot when it is ready.")
         steps.setWordWrap(True)
         v.addWidget(steps)
@@ -98,11 +106,13 @@ class WelcomeDialog(QDialog):
         return w
 
     # ----- actions --------------------------------------------------------------------------
-    def choose(self, key):
+    def choose(self, key, simple=False):
         style = "compact" if self.rb_small.isChecked() else "full"
         self.chosen = key
+        self.ov.set_setting("simple_mode", bool(simple))
+        self.ov.apply_tray_simple()
         self.ov.apply_setup(key, tower_style=style, rebuild=False)
-        title = next(s["title"] for s in SETUPS if s["key"] == key)
+        title = "Simple version" if simple else next(s["title"] for s in SETUPS if s["key"] == key)
         extra = ""
         if key == "match":
             extra = "<br>Next, open the <b>Draft</b> tab and type the players of both teams."

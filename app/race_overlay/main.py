@@ -11,7 +11,7 @@ from . import logbuf
 from .config import load_config, save_config
 from .constants import APP_NAME, APP_VERSION, IS_WINDOWS, SCRIPT_DIR
 from .overlay_widget import OverlayWidget
-from .sources import DemoThread, SseThread, WatchThread, choose_source
+from .sources import DemoThread, SseThread, choose_source
 
 
 def main():
@@ -19,11 +19,8 @@ def main():
     ap.add_argument("--version", action="version", version=APP_NAME + " " + APP_VERSION)
     ap.add_argument("--server", default="http://127.0.0.1:5315", help="Race Overlay server URL")
     ap.add_argument("--demo", metavar="RACE.json", help="replay a saved horseACT race instead of live data")
-    ap.add_argument("--watch", nargs="?", const="", default=None, metavar="FOLDER",
-                    help="watch a folder of saved races and play the newest JSON automatically "
-                         "(FOLDER is remembered; omit it next time to reuse the saved one)")
-    ap.add_argument("--ignore-existing", action="store_true",
-                    help="with --watch: do not play the race files that are already in the folder at startup")
+    ap.add_argument("--watch", nargs="?", const="", default=None, help=argparse.SUPPRESS)     # removed: always live now
+    ap.add_argument("--ignore-existing", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--game-linked", action="store_true",
                     help="only work while Uma Musume is running")
     ap.add_argument("--quit-with-game", action="store_true",
@@ -66,18 +63,8 @@ def main():
         app.setWindowIcon(QIcon(icon_path))
     cfg = load_config()
     w = OverlayWidget(args, cfg)
-    kind, folder = choose_source(args, w.s, cfg)
-    if kind == "watch":
-        if not folder and args.watch is not None and not w.s.get("source"):
-            print("No folder saved yet. Use: --watch \"/path/to/Saved races\"")
-            sys.exit(1)
-        if folder:
-            cfg["watch_dir"] = folder
-            save_config(cfg)
-        src = WatchThread(folder, args.demo_speed, args.ignore_existing,
-                          args.game_match if args.game_linked else "", args.quit_with_game,
-                          subfolders=bool(w.s.get("watch_subfolders", True)))
-    elif kind == "demo":
+    kind, _folder = choose_source(args, w.s, cfg)
+    if kind == "demo":
         src = DemoThread(args.demo, args.demo_speed)
     else:
         src = SseThread(args.server, args.game_match if args.game_linked else "", args.quit_with_game)

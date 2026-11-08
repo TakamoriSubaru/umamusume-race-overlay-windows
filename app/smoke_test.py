@@ -16,7 +16,7 @@ for var in ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA"):
     os.environ[var] = home
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-sys.argv = ["smoke_test", "--watch", home, "--show", "--no-tray", "--no-game-link"]
+sys.argv = ["smoke_test", "--show", "--no-tray", "--no-game-link"]
 
 from PyQt6.QtWidgets import QApplication            # noqa: E402
 from race_overlay import main as mn                  # noqa: E402
@@ -69,6 +69,13 @@ def fake_exec():
     from race_overlay.setups import SETUPS
     for st in SETUPS:
         w.apply_setup(st["key"], rebuild=False)
+
+    w.set_simple_mode(True)                              # the simple version: Home, Look, People, Help only
+    pump(0.3)
+    shown = [w.dialog._tabs.tabText(i) for i in range(w.dialog._tabs.count()) if w.dialog._tabs.isTabVisible(i)]
+    assert shown == ["Home", "Look", "People", "Help"], shown
+    w.set_simple_mode(False)
+    pump(0.3)
 
     entries, footer = w.sample_results()                 # every board, with made-up data
     w.board.set_pinned(True, (entries, footer))

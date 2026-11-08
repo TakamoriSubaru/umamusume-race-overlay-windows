@@ -117,74 +117,6 @@ def load_skills(paths):
     return {}
 
 
-def _cond(info):
-    groups = info.get("conditionGroups") or []
-    return " | ".join(g.get("condition", "") for g in groups if isinstance(g, dict))
-
-
-def _effects(info):
-    bits = []
-    for g in info.get("conditionGroups") or []:
-        for e in g.get("effects") or []:
-            bits.append("%s:%s" % (e.get("type"), e.get("value")))
-    return ", ".join(bits)
-
-
-def tables(records, skills):
-    """The four sheets as (name, header, rows)."""
-    races, runners, srows = [], [], []
-    stat = {}
-    for n, r in enumerate(sorted(records, key=lambda x: x.get("at", 0)), 1):
-        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(r.get("at", 0)))
-        inf = r.get("info") or {}
-        races.append([n, when, r.get("course", ""), r.get("course2", ""), inf.get("trackName") or "", inf.get("surface") or "",
-                      inf.get("distance") or "", inf.get("ground") or "", inf.get("weather") or "", inf.get("season") or "",
-                      len(r["runners"])])
-        for u in r["runners"]:
-            eq = u.get("equipped") or []
-            acted = {a["id"] for a in u.get("acts", [])}
-            runners.append([n, when, u.get("place"), u.get("gate"), u.get("trainer"), u.get("label") or u.get("uma"),
-                            STYLE_NAMES.get(u.get("style"), ""), u.get("time"), u.get("gap"),
-                            len(eq) if eq else "", len(acted)])
-            seen = set()
-            for a in u.get("acts", []):
-                info = skills.get(a["id"], {})
-                srows.append([n, when, u.get("place"), u.get("trainer"), u.get("label") or u.get("uma"), a["id"],
-                              info.get("name", ""), RARITY.get(info.get("rarity"), info.get("rarity") or ""),
-                              "yes" if a["id"] in eq else ("no" if eq else "unknown"), a.get("time"), a.get("dist"), a.get("pct"),
-                              info.get("gradeValue", ""), _cond(info), _effects(info)])
-                s = stat.setdefault(a["id"], {"eq": 0, "hit": 0, "uses": 0, "dist": []})
-                s["uses"] += 1
-                if a["id"] not in seen:
-                    seen.add(a["id"])
-                    s["hit"] += 1
-                if a.get("dist") is not None:
-                    s["dist"].append(a["dist"])
-            for sid in eq:                         # brought but never activated
-                s = stat.setdefault(sid, {"eq": 0, "hit": 0, "uses": 0, "dist": []})
-                s["eq"] += 1
-                if sid not in acted:
-                    info = skills.get(sid, {})
-                    srows.append([n, when, u.get("place"), u.get("trainer"), u.get("label") or u.get("uma"), sid,
-                                  info.get("name", ""), RARITY.get(info.get("rarity"), info.get("rarity") or ""),
-                                  "yes", "", "", "", info.get("gradeValue", ""), _cond(info), _effects(info)])
-    summary = []
-    for sid, s in sorted(stat.items(), key=lambda kv: (-kv[1]["hit"], kv[0])):
-        info = skills.get(sid, {})
-        eq = s["eq"]
-        summary.append([sid, info.get("name", ""), RARITY.get(info.get("rarity"), info.get("rarity") or ""), eq or "",
-                        s["hit"], s["uses"], round(100.0 * s["hit"] / eq, 1) if eq else "",
-                        round(sum(s["dist"]) / len(s["dist"]), 1) if s["dist"] else "", _cond(info)])
-    return [
-        ("Races", ["Race", "Date", "Course", "Details", "Track", "Surface", "Distance (m)", "Ground", "Weather", "Season", "Runners"], races),
-        ("Runners", ["Race", "Date", "Place", "Gate", "Trainer", "Uma", "Style", "Finish time", "Gap", "Skills equipped", "Skills activated"], runners),
-        ("Skills", ["Race", "Date", "Place", "Trainer", "Uma", "Skill id", "Skill", "Rarity", "Equipped", "Time (s)", "Distance (m)",
-                    "Race progress (%)", "Grade value", "Condition", "Effects (type:value)"], srows),
-        ("Skill summary", ["Skill id", "Skill", "Rarity", "Times equipped", "Races activated", "Activations", "Activation rate (%)",
-                           "Average distance (m)", "Condition"], summary),
-    ]
-
-
 def _col(i):
     s = ""
     i += 1
@@ -270,25 +202,106 @@ def write_xlsx(path, sheets):
             z.writestr("xl/worksheets/sheet%d.xml" % (i + 1), _sheet_xml(header, rows))
 
 
-def export_xlsx(path, records, skills):
-    write_xlsx(path, tables(records, skills))
+def _levels(raw):
+    """{skill id: level} from a skill_array like [{"skill_id": 100191, "level": 5}, ...]."""
+    out = {}
+    for x in raw or []:
+        if not isinstance(x, dict):
+            continue
+        try:
+            sid, lv = int(x.get("skill_id")), int(x.get("level") or 0)
+        except (TypeError, ValueError):
+            continue
+        if sid > 0 and sid not in out:
+            out[sid] = lv
+    return out
 
 
-def race_tables(rec, skills):
-    """ONE race, kept simple: every skill and how many umas of that race brought it (and who).
-    When the race data does not list the skills each uma brought, it lists the skills that activated instead."""
-    brought, active = {}, {}
-    for u in rec["runners"]:
-        who = u.get("trainer") or u.get("label") or u.get("uma")
-        for sid in dict.fromkeys(u.get("equipped") or []):
-            brought.setdefault(sid, []).append(who)
-        for sid in dict.fromkeys(a["id"] for a in u.get("acts", [])):
-            active.setdefault(sid, []).append(who)
-    known = bool(brought)
-    src = brought if known else active
-    rows = []
-    for sid in sorted(src, key=lambda i: (-len(src[i]), skills.get(i, {}).get("name", ""), i)):
-        info = skills.get(sid, {})
-        rows.append([info.get("name") or sid, len(src[sid]), ", ".join(src[sid])])
-    head = ["Skill", "Umas that brought it" if known else "Umas it activated for", "Who"]
-    return [("Skills in this race" if known else "Activated skills (brought: unknown)", head, rows)]
+def read_race_file(path):
+    """One saved race file (horseACT .json) -> a race record: who ran and which skills each uma brought.
+    None when the file is not a race."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        at = os.path.getmtime(path)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(d, dict) or not isinstance(d.get("raceHorse"), list):
+        return None
+    runners = []
+    for h in d["raceHorse"]:
+        if not isinstance(h, dict):
+            continue
+        rdata = h.get("responseHorseData") or {}
+        lv = _levels(rdata.get("skill_array"))
+        name = h.get("charaName") or ""
+        runners.append({"idx": h.get("horseIndex", len(runners)), "gate": h.get("postNumber"),
+                        "trainer": h.get("trainerName") or rdata.get("trainer_name") or "", "uma": name, "label": name,
+                        "place": h.get("finishOrder"), "time": "", "equipped": list(lv),
+                        "levels": {str(k): v for k, v in lv.items()}})
+    if not runners:
+        return None
+    key = "%s|%s" % (d.get("randomSeed"), "||".join(sorted("%s|%s" % (r["trainer"], r["uma"]) for r in runners)))
+    return {"id": key, "at": at, "src": os.path.basename(path), "course": "", "runners": runners}
+
+
+def records_from_paths(paths):
+    """Race records from files and/or folders (folders are searched, including the folders inside).
+    Returns (records, files looked at). The same race saved twice counts once."""
+    files = []
+    for p in paths:
+        if os.path.isdir(p):
+            for root, _dirs, names in os.walk(p):
+                files += [os.path.join(root, n) for n in names if n.lower().endswith(".json")]
+        elif os.path.isfile(p):
+            files.append(p)
+    seen, out = set(), []
+    for fp in sorted(files):
+        rec = read_race_file(fp)
+        if rec and rec["id"] not in seen:
+            seen.add(rec["id"])
+            out.append(rec)
+    return out, len(files)
+
+
+def skill_tables(records, skills):
+    """The sheets for the spreadsheet. All of it is about the skills each uma BROUGHT (not what activated):
+    Who has what (one row per uma), Skill counts (how many umas brought each skill) and All skills (one row per skill per uma)."""
+    def name(sid):
+        return skills.get(sid, {}).get("name") or str(sid)
+
+    def rarity(sid):
+        r = skills.get(sid, {}).get("rarity")
+        return RARITY.get(r, r or "")
+
+    who, allrows, count = [], [], {}
+    for n, r in enumerate(sorted(records, key=lambda x: (x.get("at", 0), x.get("src", ""))), 1):
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(r.get("at", 0)))
+        for u in sorted(r["runners"], key=lambda x: (x.get("place") or 99, x.get("idx", 0))):
+            eq = u.get("equipped") or []
+            lv = u.get("levels") or {}
+            label = u.get("label") or u.get("uma")
+            labels = []
+            for sid in eq:
+                level = lv.get(str(sid))
+                labels.append(name(sid) + (" (Lvl %s)" % level if level and level > 1 else ""))
+                allrows.append([n, when, u.get("place"), u.get("trainer"), label, sid, name(sid), rarity(sid), level or ""])
+                count.setdefault(sid, []).append(u.get("trainer") or label)
+            who.append([n, when, r.get("src", "live race"), u.get("place"), u.get("gate"), u.get("trainer"), label, len(eq),
+                        ", ".join(labels)])
+    crow = []
+    for sid, people in sorted(count.items(), key=lambda kv: (-len(kv[1]), name(kv[0]).lower())):
+        tally = {}
+        for p in people:
+            tally[p] = tally.get(p, 0) + 1
+        crow.append([name(sid), rarity(sid), len(people),
+                     ", ".join(p if k == 1 else "%s (%d)" % (p, k) for p, k in tally.items()), sid])
+    return [
+        ("Who has what", ["Race", "Date", "File", "Place", "Gate", "Trainer", "Uma", "Skills", "Skills they brought"], who),
+        ("Skill counts", ["Skill", "Rarity", "Umas that brought it", "Who", "Skill id"], crow),
+        ("All skills", ["Race", "Date", "Place", "Trainer", "Uma", "Skill id", "Skill", "Rarity", "Level"], allrows),
+    ]
+
+
+def export_skills_xlsx(path, records, skills):
+    write_xlsx(path, skill_tables(records, skills))

@@ -43,7 +43,6 @@ from .constants import (APP_NAME, APP_VERSION, FROZEN, IS_WINDOWS, LUCK_NAME, MA
                         SCRIPT_DIR, STANDINGS_NAME, STATE_COLORS, THEME_PRESETS)
 from . import logbuf
 from .diagnostics import LOG_FILES, read_tail, run_checks
-from .sources import choose_source, count_race_files
 from .setups import SETUPS, current_setup
 from .theme import Banner, THEME, build_theme_qss
 from .updater import (
@@ -65,11 +64,6 @@ SLIDE_CHOICES = (("auto", "Auto: the side the window is on"),
                  ("left", "Always from the left"),
                  ("right", "Always from the right"),
                  ("off", "No sliding (fade in)"))
-
-
-SOURCE_CHOICES = (("", "Follow the default (live)" if IS_WINDOWS else "Follow the start script (MODE in settings.sh)"),
-                  ("live", "Live: exact race clock from Race Overlay"),
-                  ("watch", "Saved races: read the race files from a folder"))
 
 
 class _NameItem(QTableWidgetItem):
@@ -139,6 +133,13 @@ class SettingsDialog(QDialog):
         self.lbl_state.setWordWrap(True)
         self.lbl_state.setStyleSheet("font-size:15px;")
         mv.addWidget(self.lbl_state)
+        simple = bool(ov.s.get("simple_mode"))
+        self.cb_simple = QCheckBox("Simple version: only the tower, People and Look")
+        self.cb_simple.setChecked(simple)
+        self.cb_simple.setToolTip("Hides the results, standings, luck and match boards, the points, the Draft and the extra tabs. "
+                                  "Turn it off to get everything back.")
+        self.cb_simple.toggled.connect(ov.set_simple_mode)
+        mv.addWidget(self.cb_simple)
 
         sbx = QGroupBox("Setup")
         sbl = QVBoxLayout(sbx)
@@ -171,6 +172,7 @@ class SettingsDialog(QDialog):
         self.btn_setup.clicked.connect(lambda: ov.apply_setup(self.cmb_setup.currentData()))
         on_setup_changed()
         mv.addWidget(sbx)
+        sbx.setVisible(not simple)
 
         qs = Collapsible("Quick start (3 steps)", open_=bool(ov.s.get("quick_start_open", True)),
                          on_toggle=lambda on: ov.set_setting("quick_start_open", on))
@@ -223,6 +225,7 @@ class SettingsDialog(QDialog):
         place = Collapsible("Place the boards on screen (before you stream)")
         place.body_l.addWidget(bx)
         mv.addWidget(place)
+        place.setVisible(not simple)
 
         more = Collapsible("More: start-up, picture folders, updates")
         mm = more.body_l
@@ -261,7 +264,7 @@ class SettingsDialog(QDialog):
                 ov.set_setting("race_overlay_dir", self.ed_ro.text().strip())
                 found = find_race_overlay(self.ed_ro.text().strip())
                 self.lbl_ro.setText("Found: %s (restart the overlay to use a new folder)" % found if found
-                                    else "Race Overlay.exe not found there. Without it only saved races work.")
+                                    else "Race Overlay.exe not found there, so the overlay gets no live race data.")
 
             def ro_choose():
                 d = QFileDialog.getExistingDirectory(self, "Folder with Race Overlay.exe",
@@ -330,98 +333,20 @@ class SettingsDialog(QDialog):
         mv.addWidget(bq)
         tabs.addTab(self.scrolled(mt), "Home")
 
-        # ---- Data tab (where the races come from + the saved races folder)
+        # ---- Data tab (the skills spreadsheet, and the server)
         rt = QWidget()
         rv = QVBoxLayout(rt)
-        sbox = QGroupBox("Where do the races come from?")
-        sl = QVBoxLayout(sbox)
-        self.cmb_source = QComboBox()
-        for _value, text in SOURCE_CHOICES:
-            self.cmb_source.addItem(text)
-        cur = ov.s.get("source", "")
-        self.cmb_source.setCurrentIndex(next((i for i, (v, _t) in enumerate(SOURCE_CHOICES) if v == cur), 0))
-        self.cmb_source.activated.connect(self.on_source)
-        sl.addWidget(self.cmb_source)
-        self.lbl_source = QLabel()
-        self.lbl_source.setWordWrap(True)
-        sl.addWidget(self.lbl_source)
-        rv.addWidget(sbox)
-
-        fbox = QGroupBox("Saved races folder")
-        fl = QVBoxLayout(fbox)
-        hint = QLabel("The folder where your race files (horseACT .json) are saved, for example "
-                      "<i>Documents/Saved races</i>. Choose the main folder: the folders inside it "
-                      "(Career, Champions meeting, Room match, ...) are searched too.")
-        hint.setWordWrap(True)
-        fl.addWidget(hint)
-        frow = QHBoxLayout()
-        self.ed_races = QLineEdit(ov.s.get("saved_races_dir", ""))
-        self.ed_races.setPlaceholderText("(not chosen yet)")
-        self.ed_races.editingFinished.connect(self.on_races_text)
-        self.btn_browse = QPushButton("Browse...")
-        self.btn_browse.setObjectName("primary")
-        self.btn_browse.clicked.connect(self.browse_races)
-        frow.addWidget(self.ed_races, 1)
-        frow.addWidget(self.btn_browse)
-        fl.addLayout(frow)
-        self.cb_sub = QCheckBox("Also look in the folders inside it")
-        self.cb_sub.setChecked(bool(ov.s.get("watch_subfolders", True)))
-        self.cb_sub.toggled.connect(self.on_subfolders)
-        fl.addWidget(self.cb_sub)
-        self.lbl_found = QLabel("")
-        self.lbl_found.setWordWrap(True)
-        fl.addWidget(self.lbl_found)
-        bo2 = QPushButton("Open folder")
-        bo2.clicked.connect(self.open_races_folder)
-        fl.addWidget(bo2)
-        rv.addWidget(fbox)
-
-        dbox = QGroupBox("When does the race start? (saved races)")
-        dl = QVBoxLayout(dbox)
-        dtext = QLabel("The game saves the race file when the race <b>loads</b>, long before the gates open. "
-                       "The overlay waits this many seconds after it sees a new file and then slides in. "
-                       "Too early? Make it bigger. Too late? Make it smaller.")
-        dtext.setWordWrap(True)
-        dl.addWidget(dtext)
-        drow = QHBoxLayout()
-        self.sp_delay = QDoubleSpinBox()
-        self.sp_delay.setRange(0.0, 120.0)
-        self.sp_delay.setSingleStep(0.5)
-        self.sp_delay.setDecimals(1)
-        self.sp_delay.setSuffix(" seconds")
-        self.sp_delay.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)   # type it, or use the wheel / arrow keys
-        self.sp_delay.setMinimumWidth(150)
-        self.sp_delay.setValue(float(ov.s.get("start_delay", 12.0)))
-        self.sp_delay.valueChanged.connect(lambda v: ov.set_setting("start_delay", float(v)))
-        drow.addWidget(self.sp_delay)
-        drow.addStretch(1)
-        dl.addLayout(drow)
-        dnote = QLabel("Fine tuning: with the overlay window selected, the arrow keys move the start by "
-                       "0.25 s (left / right) or 1 s (down / up). Live mode needs none of this: it follows "
-                       "the real race clock.")
-        dnote.setWordWrap(True)
-        dl.addWidget(dnote)
-        rv.addWidget(dbox)
-
-        kbox = QGroupBox("Race Overlay server (live mode)")
+        kbox = QGroupBox("Race Overlay server")
         kl = QVBoxLayout(kbox)
-        kn = QLabel("The server only works while Uma Musume is running. To test without the game use "
-                    "<i>Show preview race</i> or <i>Replay a saved race (test)</i> in the Home tab.")
+        kn = QLabel("The races come from the Race Overlay server (the <i>Server Files</i> folder). It follows the real race "
+                    "clock, so the tower starts exactly when the race starts. It only works while Uma Musume is running. "
+                    "To test without the game use <i>Show preview race</i> or <i>Replay a saved race (test)</i> in the Home tab.")
         kn.setWordWrap(True)
         kl.addWidget(kn)
         rv.addWidget(kbox)
-
-        wbox = QGroupBox("Good to know")
-        wl = QVBoxLayout(wbox)
-        know = QLabel("Files that are not races (for example a list of veterans) are skipped automatically.")
-        know.setWordWrap(True)
-        wl.addWidget(know)
-        rv.addWidget(wbox)
         self._data_layout = rv                      # the skills box is added here (built with the Cup Score tab)
         rv.addStretch(1)
         tabs.addTab(self.scrolled(rt), "Data")
-        self.update_source_label()
-        self.refresh_count()
 
         # ---- Look tab
         look = QWidget()                  # Look: pictures, colours, text
@@ -873,6 +798,8 @@ class SettingsDialog(QDialog):
         look_tabs.addTab(self.scrolled(tower), "Tower")
         look_tabs.addTab(self.scrolled(boards), "Boards")
         tabs.addTab(look_tabs, "Look")
+        if simple:
+            look_tabs.setTabVisible(2, False)          # no boards in the simple version
 
         # ---- People tab (Players, Umas as inner tabs)
         people = QTabWidget()
@@ -1011,6 +938,10 @@ class SettingsDialog(QDialog):
         tabs.addTab(stt, "Help")
         self._tabs = tabs
         self._status_tab = stt
+        if simple:                                   # the simple version: Home, Look, People and Help only
+            for i in range(tabs.count()):
+                if tabs.tabText(i).replace(" (WIP)", "") in ("Data", "Cup Score", "Draft"):
+                    tabs.setTabVisible(i, False)
         tabs.currentChanged.connect(lambda _i: self.refresh_status() if tabs.currentWidget() is stt else None)
         self.refresh_umas()
 
@@ -1298,35 +1229,40 @@ class SettingsDialog(QDialog):
         wl.addWidget(self.lbl_wstat)
         v.addWidget(wbox)
 
-        dbox = QGroupBox("Skills of every race (for a spreadsheet)")
+        dbox = QGroupBox("Skills spreadsheet (who has which skills)")
         dl = QVBoxLayout(dbox)
-        self.cb_rdata = QCheckBox("Save the results and skills of every race")
+        di = QLabel("Put in your own race files (horseACT .json) and get a spreadsheet with the skills every uma <b>brought</b> "
+                    "(with the level), and how many umas brought each skill.")
+        di.setWordWrap(True)
+        dl.addWidget(di)
+        db = QHBoxLayout()
+        for text, fn in (("Choose race files...", self.skills_from_files), ("Choose a folder...", self.skills_from_folder)):
+            b = QPushButton(text)
+            b.setObjectName("primary")
+            b.setMinimumWidth(10)
+            b.clicked.connect(fn)
+            db.addWidget(b)
+        dl.addLayout(db)
+        dn = QLabel("<i>The sheets: <b>Who has what</b> (one row per uma), <b>Skill counts</b> (for example A Kiss for Courage: 2, "
+                    "and who) and <b>All skills</b> (one row per skill, to filter). The skill names come from Race Overlay's "
+                    "umdb.json. A race saved twice counts once.</i>")
+        dn.setWordWrap(True)
+        dl.addWidget(dn)
+        self.cb_rdata = QCheckBox("Also keep the races I play live (for the button below)")
         self.cb_rdata.setChecked(bool(s.get("race_data", True)))
-        self.cb_rdata.setToolTip("Only races that really happen are saved (not previews or old files). Everything stays on this computer.")
+        self.cb_rdata.setToolTip("Only races that really happen are kept (not previews or old files). Everything stays on this computer.")
         self.cb_rdata.toggled.connect(lambda on: ov.set_setting("race_data", on))
         dl.addWidget(self.cb_rdata)
         self.lbl_rdata = QLabel()
         self.lbl_rdata.setWordWrap(True)
         dl.addWidget(self.lbl_rdata)
-        db = QHBoxLayout()
-        for text, fn in (("Save the last race (.xlsx)...", self.export_last_race), ("Save all races (.xlsx)...", self.export_race_data)):
-            b = QPushButton(text)
-            b.setMinimumWidth(10)
-            b.clicked.connect(fn)
-            db.addWidget(b)
-        dl.addLayout(db)
         db2 = QHBoxLayout()
-        for text, fn in (("Open the folder", self.open_race_data), ("Delete the saved races", self.clear_race_data)):
+        for text, fn in (("Spreadsheet of my live races...", self.skills_from_live), ("Delete the kept live races", self.clear_race_data)):
             b = QPushButton(text)
             b.setMinimumWidth(10)
             b.clicked.connect(fn)
             db2.addWidget(b)
         dl.addLayout(db2)
-        dn = QLabel("<i>The spreadsheet has four sheets: Races, Runners, Skills (one row per skill: equipped or not, when and where "
-                    "in the race it activated, its condition) and Skill summary. Skills the server does not list as equipped show "
-                    "\"unknown\" in the Equipped column.</i>")
-        dn.setWordWrap(True)
-        dl.addWidget(dn)
         v.addStretch(1)
 
         def sync_smode(*_a):
@@ -1629,52 +1565,67 @@ class SettingsDialog(QDialog):
 
     def update_race_data_label(self):
         n = self.race_log().count()
-        self.lbl_rdata.setText("%d race%s saved so far." % (n, "" if n == 1 else "s") if n else "No race saved yet.")
+        self.lbl_rdata.setText("%d live race%s kept so far." % (n, "" if n == 1 else "s") if n else "No live race kept yet.")
 
-    def export_last_race(self):
-        """One race only: per uma the skills brought and activated, with the totals."""
-        from .racedata import load_skills, race_tables, write_xlsx
-        records = sorted(self.race_log().records(), key=lambda r: r.get("at", 0))
+    def make_skills_sheet(self, records, files=None):
+        """Ask where to save, then write the spreadsheet of the skills the umas brought."""
+        from .racedata import export_skills_xlsx, load_skills
         if not records:
-            QMessageBox.information(self, "Race data", "No race is saved yet. Play a race first.")
+            QMessageBox.information(self, "Skills spreadsheet", "No race found there.\nChoose race files (.json) saved by horseACT."
+                                    if files is not None else "No live race is kept yet. Play a race first.")
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Save the last race", os.path.expanduser("~/last-race-skills.xlsx"), "Spreadsheet (*.xlsx)")
+        start = os.path.join(self.ov.s.get("saved_races_dir") or os.path.expanduser("~"), "skills.xlsx")
+        path, _ = QFileDialog.getSaveFileName(self, "Save the spreadsheet", start, "Spreadsheet (*.xlsx)")
         if not path:
             return
         if not path.lower().endswith(".xlsx"):
             path += ".xlsx"
         skills = load_skills(self.ov.umdb_paths())
         try:
-            write_xlsx(path, race_tables(records[-1], skills))
+            export_skills_xlsx(path, records, skills)
         except OSError as e:
-            QMessageBox.warning(self, "Race data", "Could not save the file:\n%s" % e)
+            QMessageBox.warning(self, "Skills spreadsheet", "Could not save the file:\n%s" % e)
             return
-        QMessageBox.information(self, "Race data", "Saved the last race to:\n%s%s" % (
-            path, "" if skills else "\n\nNo umdb.json was found, so the skill names are missing (only the ids)."))
+        umas = sum(len(r["runners"]) for r in records)
+        known = sum(1 for r in records for u in r["runners"] if u.get("equipped"))
+        note = ""
+        if not skills:
+            note += "\n\nNo umdb.json was found, so the skill names are missing (only the numbers)."
+        if known < umas:
+            note += "\n\n%d of %d umas had no skill list in the race data." % (umas - known, umas)
+        QMessageBox.information(self, "Skills spreadsheet", "Saved %d race%s (%d umas) to:\n%s%s"
+                                % (len(records), "" if len(records) == 1 else "s", umas, path, note))
 
-    def export_race_data(self):
-        from .racedata import export_xlsx, load_skills
-        records = self.race_log().records()
-        if not records:
-            QMessageBox.information(self, "Race data", "No race is saved yet. Play a race first.")
-            return
-        path, _ = QFileDialog.getSaveFileName(self, "Save the race data", os.path.expanduser("~/race-data.xlsx"), "Spreadsheet (*.xlsx)")
-        if not path:
-            return
-        if not path.lower().endswith(".xlsx"):
-            path += ".xlsx"
-        skills = load_skills(self.ov.umdb_paths())
+    def _read_records(self, paths):
+        from PyQt6.QtWidgets import QApplication
+        from .racedata import records_from_paths
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            export_xlsx(path, records, skills)
-        except OSError as e:
-            QMessageBox.warning(self, "Race data", "Could not save the file:\n%s" % e)
-            return
-        note = "" if skills else "\n\nNo umdb.json was found, so the skill names are missing (only the ids)."
-        QMessageBox.information(self, "Race data", "Saved %d races to:\n%s%s" % (len(records), path, note))
+            recs, n = records_from_paths(paths)
+        finally:
+            QApplication.restoreOverrideCursor()
+        return recs, n
 
-    def open_race_data(self):
-        from .constants import CONFIG_DIR
-        open_folder(CONFIG_DIR)
+    def skills_from_files(self):
+        start = self.ov.s.get("saved_races_dir") or os.path.expanduser("~")
+        paths, _ = QFileDialog.getOpenFileNames(self, "Choose your race files", start, "Race files (*.json);;All files (*)")
+        if not paths:
+            return
+        self.ov.set_setting("saved_races_dir", os.path.dirname(paths[0]))
+        recs, n = self._read_records(paths)
+        self.make_skills_sheet(recs, n)
+
+    def skills_from_folder(self):
+        start = self.ov.s.get("saved_races_dir") or os.path.expanduser("~")
+        folder = QFileDialog.getExistingDirectory(self, "Choose the folder with your race files (the folders inside are searched too)", start)
+        if not folder:
+            return
+        self.ov.set_setting("saved_races_dir", folder)
+        recs, n = self._read_records([folder])
+        self.make_skills_sheet(recs, n)
+
+    def skills_from_live(self):
+        self.make_skills_sheet(self.race_log().records())
 
     def clear_race_data(self):
         if QMessageBox.question(self, "Delete", "Delete all saved race data? This cannot be undone.") != QMessageBox.StandardButton.Yes:
@@ -1744,106 +1695,6 @@ class SettingsDialog(QDialog):
             self.ov.standings.refresh(True)
             self.update_book_label()
 
-    # ---- races tab
-    def races_folder(self):
-        return os.path.expanduser(self.ed_races.text().strip())
-
-    def update_source_label(self):
-        ov = self.ov
-        names = {"live": "Live (from Race Overlay)", "watch": "Saved races folder", "demo": "Demo file"}
-        kind, folder = choose_source(ov.args, ov.s, ov.cfg)
-        text = "Running now: <b>%s</b>." % names.get(ov.source_kind, ov.source_kind)
-        if kind != ov.source_kind:
-            text += "<br>After a restart: <b>%s</b>." % names.get(kind, kind)
-        if kind == "watch" and not folder:
-            text += "<br><span style='color:%s'>Choose the saved races folder below first.</span>" % THEME["yellow"]
-        self.lbl_source.setText(text)
-
-    def refresh_count(self):
-        folder = self.races_folder()
-        if not folder:
-            self.lbl_found.setText("No folder chosen yet.")
-            return
-        if not os.path.isdir(folder):
-            self.lbl_found.setText("<span style='color:%s'>That folder was not found.</span>" % THEME["pink"])
-            return
-        if self.count_job is not None and self.count_job.isRunning():
-            self._count_again = True
-            return
-        sub = self.cb_sub.isChecked()
-        self.lbl_found.setText("Looking...")
-        self.count_job = Job(lambda: count_race_files(folder, sub))
-        self.count_job.done.connect(self.on_count)
-        self.count_job.failed.connect(lambda msg: self.lbl_found.setText("Could not read the folder: " + msg))
-        self.count_job.start()
-
-    def on_count(self, res):
-        files, folders = res
-        if files:
-            self.lbl_found.setText("<span style='color:%s'>Found %d .json file%s in %d folder%s.</span>"
-                                   % (THEME["mint"], files, "" if files == 1 else "s", folders,
-                                      "" if folders == 1 else "s"))
-        else:
-            self.lbl_found.setText("<span style='color:%s'>No .json files found there yet.</span>" % THEME["yellow"])
-        if self._count_again:
-            self._count_again = False
-            self.refresh_count()
-
-    def apply_choice(self):
-        """Tell the program about the new source / folder; restart it when that is needed."""
-        ov = self.ov
-        self.update_source_label()
-        kind, folder = choose_source(ov.args, ov.s, ov.cfg)
-        if kind == "watch" and not folder:
-            return                       # nothing to watch yet: wait until a folder is chosen
-        if ov.apply_source_choice():
-            self.update_source_label()
-            return
-        if QMessageBox.question(self, "Restart",
-                                "The program has to restart to use the new choice.\nRestart now?"
-                                ) == QMessageBox.StandardButton.Yes:
-            ov.restart_now()
-
-    def on_source(self, idx):
-        self.ov.set_setting("source", SOURCE_CHOICES[idx][0])
-        self.apply_choice()
-
-    def set_races_folder(self, path):
-        self.ed_races.setText(path)
-        self.ov.set_setting("saved_races_dir", path)
-        self.refresh_count()
-        ov = self.ov
-        if path and os.path.isdir(path) and choose_source(ov.args, ov.s, ov.cfg)[0] == "live" \
-                and ov.source_kind == "live":
-            if QMessageBox.question(self, "Saved races",
-                                    "The overlay is using Live mode right now.\n"
-                                    "Use the saved races folder instead?") == QMessageBox.StandardButton.Yes:
-                ov.set_setting("source", "watch")
-                self.cmb_source.setCurrentIndex(2)
-        self.apply_choice()
-
-    def on_races_text(self):
-        path = self.ed_races.text().strip()
-        if path != self.ov.s.get("saved_races_dir", ""):
-            self.set_races_folder(path)
-
-    def browse_races(self):
-        start = self.races_folder() if os.path.isdir(self.races_folder()) else os.path.expanduser("~")
-        path = QFileDialog.getExistingDirectory(self, "Choose the Saved races folder", start)
-        if path:
-            self.set_races_folder(path)
-
-    def on_subfolders(self, on):
-        self.ov.set_setting("watch_subfolders", bool(on))
-        self.refresh_count()
-        self.apply_choice()
-
-    def open_races_folder(self):
-        folder = self.races_folder()
-        if folder and os.path.isdir(folder):
-            open_folder(folder)
-        else:
-            QMessageBox.information(self, "Saved races", "Choose the folder first (Browse...).")
 
     # ---- updates
     def ask_install(self, files, source, restart=True):
