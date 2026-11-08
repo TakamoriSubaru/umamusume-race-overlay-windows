@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.1
+
+- **Simple version is slimmer:** the menu is a small window with only what you need (status, show overlay, preview, Look, People, Help). The quick start box is hidden.
+
 ## 2.2.0
 
 - **Skills spreadsheet from your own race files:** *Data tab > Choose race files... / Choose a folder...* makes a spreadsheet of the skills every uma **brought** (with the level): *Who has what*, *Skill counts* (for example A Kiss for Courage: 2, and who) and *All skills*. The races you play live are kept too, with their own button. The old activated-skills spreadsheets are gone.

@@ -114,11 +114,12 @@ class SettingsDialog(QDialog):
         icon_path = os.path.join(SCRIPT_DIR, "icon.png")
         if os.path.isfile(icon_path):
             self.setWindowIcon(QIcon(icon_path))
-        self.resize(720, 780)
+        simple = bool(ov.s.get("simple_mode"))
+        self.resize(500, 520) if simple else self.resize(720, 780)       # the simple version is a small window
         self.setStyleSheet(build_theme_qss())
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 16, 16, 14)
-        lay.setSpacing(12)
+        lay.setSpacing(8 if simple else 12)
         lay.addWidget(Banner("Race Overlay", PLATFORM + " edition  ·  version %s  ·  settings" % APP_VERSION))
         tabs = QTabWidget()
         tabs.setDocumentMode(False)
@@ -133,7 +134,6 @@ class SettingsDialog(QDialog):
         self.lbl_state.setWordWrap(True)
         self.lbl_state.setStyleSheet("font-size:15px;")
         mv.addWidget(self.lbl_state)
-        simple = bool(ov.s.get("simple_mode"))
         self.cb_simple = QCheckBox("Simple version: only the tower, People and Look")
         self.cb_simple.setChecked(simple)
         self.cb_simple.setToolTip("Hides the results, standings, luck and match boards, the points, the Draft and the extra tabs. "
@@ -185,6 +185,7 @@ class SettingsDialog(QDialog):
         qtext.setWordWrap(True)
         qs.body_l.addWidget(qtext)
         mv.addWidget(qs)
+        qs.setVisible(not simple)
 
         row_b = QHBoxLayout()
         self.btn_show = QPushButton("Show overlay window")
@@ -325,6 +326,8 @@ class SettingsDialog(QDialog):
         self.pending = None
         self.job = None
         mv.addWidget(more)
+        if simple:
+            mv.setSpacing(6)
 
         mv.addStretch(1)
         bq = QPushButton("Quit the overlay program")
