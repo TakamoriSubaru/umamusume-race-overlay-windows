@@ -186,7 +186,7 @@ def detect_layout(rows):
     Returns {"blocks": [(player, uma, points), ...], "final": (player, r1, r2, r3) or None, "first_row": n}."""
     for ri, row in enumerate(rows[:20]):
         c = _cells(row)
-        if "trainer" not in c and "member" not in c:
+        if not any(h in c for h in ("trainer", "member", "name", "player")):
             continue
         blocks = []
         for i, name in enumerate(c):
@@ -197,8 +197,9 @@ def detect_layout(rows):
             if score is not None:
                 blocks.append((i, uma, score))
         final = None
-        if "member" in c:
-            m = c.index("member")
+        head = next((h for h in ("member", "name", "player") if h in c), None)     # the player column of the totals table
+        if head:
+            m = c.index(head)
             rs = [next((j for j in range(m + 1, len(c)) if c[j] == "round %d" % k), None) for k in (1, 2, 3)]
             if all(r is not None for r in rs):
                 final = (m,) + tuple(rs)
@@ -235,6 +236,9 @@ def read_view(rows, s):
         if is_auto(text):
             auto = detect_layout(rows)
             k = VIEW_PICKS[view][0]
+            if auto and not auto["blocks"] and auto["final"]:       # a tab that only has the Name / Round 1 / 2 / 3 table
+                cols = [_letter(i) for i in auto["final"]]
+                return drop_zero(read_rounds(rows, cols[0], cols[1:], view, auto["first_row"]), hide)
             if not auto or len(auto["blocks"]) <= k:
                 raise ValueError("Could not find the Round %d table. Look for the headers Trainer / Uma / Score "
                                  "or type the columns by hand." % (k + 1))
@@ -247,7 +251,7 @@ def read_view(rows, s):
     if is_auto(text):
         auto = detect_layout(rows)
         if not auto or not auto["final"]:
-            raise ValueError("Could not find the Final Rankings table (headers Member / Round 1 / Round 2 / Round 3). "
+            raise ValueError("Could not find the Final Rankings table (headers Member or Name / Round 1 / Round 2 / Round 3). "
                              "Type the columns by hand.")
         cols = [_letter(i) for i in auto["final"]]
         return drop_zero(read_rounds(rows, cols[0], cols[1:], view, auto["first_row"]), hide)

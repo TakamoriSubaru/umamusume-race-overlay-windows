@@ -51,7 +51,10 @@ from .match_board import MatchBoard
 from .standings_board import StandingsBoard
 from .tray import make_tray_icon
 from .autoupdate import AutoUpdate
-from .updater import restart_program
+from .updater import Job, restart_program
+from . import sheetwrite
+from .racedata import RaceLog, build_record
+from .constants import CONFIG_DIR as _CFG_DIR
 from .util import fmt_time, install_exit_hooks, open_folder, stop_started_server
 
 
@@ -310,6 +313,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.luck.dismiss()
         self.mboard.dismiss()
         self.skill_acts = sim.get("skills") or {}
+        self.skill_log = sim.get("skill_log") or []
         self.horses = self.build_horses(payload, rmap)
 
         if collect:   # remember every trainer we see, so you can give them a picture
@@ -909,6 +913,53 @@ class OverlayWidget(FramelessMixin, QWidget):
             tri.moveTo(cx, cy + 3.5); tri.lineTo(cx + 4.5, cy - 2.5); tri.lineTo(cx - 4.5, cy - 2.5)
         tri.closeSubpath()
         p.fillPath(tri, col)
+
+    racelog = None
+    skill_log = ()
+
+    def save_race_data(self, entries, line1, line2):
+        """Keep the results and every skill of this race in race-data.jsonl (Settings > Cup Score > Race data)."""
+        try:
+            if self.racelog is None:
+                self.racelog = RaceLog(os.path.join(_CFG_DIR, "race-data.jsonl"))
+            rec = build_record(self.horses, entries, self.course_info, line1, line2, self.skill_log, self.times, self.frames)
+            if self.racelog.add(rec):
+                logbuf.add("race data saved (%d umas)" % len(rec["runners"]))
+        except Exception as e:                      # never let this disturb the race
+            logbuf.add("race data not saved: %s" % e)
+
+    sheet_status = ""
+    sheet_last = None
+    sheet_jobs = ()
+
+    def set_sheet_status(self, text):
+        self.sheet_status = "%s  %s" % (time.strftime("%H:%M"), text)
+        logbuf.add("Google Sheet: " + text)
+        if getattr(self, "dialog", None) is not None:
+            try:
+                self.dialog.update_sheet_status()
+            except Exception:
+                pass
+
+    def sheet_send(self, named=None):
+        """Send the placings of a race to the Google Sheet (through the owner's Apps Script)."""
+        named = named or self.sheet_last
+        if not named:
+            self.set_sheet_status("No race to send yet.")
+            return
+        self.sheet_last = named
+        try:
+            url = sheetwrite.check_url(self.s.get("sheet_write_url", ""))
+        except ValueError as e:
+            self.set_sheet_status("Not sent: %s" % e)
+            return
+        payload = sheetwrite.build_payload(self.s.get("sheet_write_secret", ""), self.s.get("sheet_write_round", 1), named)
+        job = Job(lambda: sheetwrite.post(url, payload))
+        job.done.connect(lambda res: self.set_sheet_status(sheetwrite.describe(res)))
+        job.failed.connect(lambda msg: self.set_sheet_status("Not sent: %s" % msg))
+        self.sheet_jobs = [j for j in self.sheet_jobs if j.isRunning()] + [job]
+        job.start()
+        self.set_sheet_status("Sending round %s ..." % payload["round"])
 
     def display_trainer(self, name):
         """A trainer name as the Look tab wants it: without the club tag, or as his Discord name."""
@@ -1535,6 +1586,8 @@ class OverlayWidget(FramelessMixin, QWidget):
         counts = (not self.preview) and (not testing) and bool(getattr(self.source, "counts", True))
         match_on = bool(self.s.get("match_mode", False)) and counts
         scoring = bool(self.s.get("scoring", True)) and counts and not match_on
+        if counts and self.s.get("race_data", True):
+            self.save_race_data(entries, line1, _line2)
         if match_on:
             self.score_match(entries, line1)
         elif self.match.races or self.s.get("match_mode", False) or any(t["players"] for t in self.match.teams):
@@ -1550,6 +1603,9 @@ class OverlayWidget(FramelessMixin, QWidget):
             for e in named:
                 e["pts"] = points_for(e["place"], len(named))
             if len(named) >= 2:
+                self.sheet_last = [{"name": e["h"].trainer, "place": e["place"]} for e in named]
+                if self.s.get("sheet_write_auto", False) and self.s.get("sheet_write_url"):
+                    self.sheet_send()
                 self.book.add_race([{"name": e["h"].trainer, "uma": e["h"].label, "place": e["place"],
                                      "time": e["time"]} for e in named], title=line1)
         # the board comes in as the tower goes out, so the two are never both full-size at the same time

@@ -108,6 +108,11 @@ DEFAULT_SETTINGS = {
     "stop_server": True,       # quitting the overlay also closes the Race Overlay server the start script started
     "open_menu": True,         # open the Menu window when the program starts
     "auto_update_check": True,   # tell me (a window) when a new version is out; checked when the program starts
+    "race_data": True,           # save the results and skills of every race (race-data.jsonl)
+    "sheet_write_url": "",       # the Web app link of the Apps Script in the Google Sheet
+    "sheet_write_secret": "",    # the secret code written in that script
+    "sheet_write_round": 1,      # which "Group Stage Round N" tab gets the placings
+    "sheet_write_auto": False,   # send every counted race by itself
     "seen_version": "",          # the last version whose "What's new" window was shown
     "update_skip": "",           # a version number you chose "Skip this version" for
     "update_url": "https://github.com/TakamoriSubaru/umamusume-race-overlay-windows/releases/latest/download/latest.json",  # "Check online" link
@@ -214,7 +219,8 @@ DEFAULT_SETTINGS = {
 
 
 KEEP_ON_RESET = ("source", "saved_races_dir", "watch_subfolders", "start_delay", "auto_hide",
-                 "update_url", "auto_update_check", "update_skip", "seen_version", "open_menu", "stop_server", "show_overlay", "results_board", "results_seconds", "default_faces",
+                 "update_url", "auto_update_check", "update_skip", "seen_version",
+                 "race_data", "sheet_write_url", "sheet_write_secret", "sheet_write_round", "sheet_write_auto", "open_menu", "stop_server", "show_overlay", "results_board", "results_seconds", "default_faces",
                  "scoring", "standings_board", "standings_mode", "standings_sheet", "standings_tab",
                  "standings_name_col", "standings_score_col", "standings_uma_col", "standings_first_row",
                  "standings_view", "standings_round_blocks", "standings_total_cols", "standings_border_values",

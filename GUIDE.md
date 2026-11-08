@@ -54,6 +54,23 @@ To share your own pictures: **Save my pictures as a zip...** and send the file p
 Home tab, **Setup**: *Just the tower*, *Tower and results*, *Points for every player*, *Team match (draft)*, *Everything at once*.
 The other tabs change looks, timing and the points or team rules.
 
+## 7b. Send the placings to your Google Sheet (optional, for the sheet owner)
+
+The program can write each player's placing into your Google Sheet after every race. Your own formulas then work out the points. It needs a small script in the sheet. You do this once:
+
+1. In the program open **Settings > Cup Score** and press **Copy the script** (in *Send placings to the Google Sheet*).
+2. Open your Google Sheet. Go to **Extensions > Apps Script**. Delete the text that is there and paste the script (Ctrl+V).
+3. In the first lines change `CHANGE-ME` to a secret code of your own (letters and numbers). Press the save icon.
+4. Press **Deploy > New deployment**. Click the gear and pick **Web app**. Set *Execute as*: **Me** and *Who has access*: **Anyone**. Press **Deploy** and allow access when Google asks.
+5. Copy the **Web app** link (it ends in `/exec`). Paste it in the program under *Web app link*, type the same secret code, choose the **Round** and press **Test the link**.
+6. Tick **Send every finished race by itself**, or press **Send the last race now** after a race.
+
+The script looks for the group of the race in the tab *Group Stage Round N* (Trainer / Placing columns) and fills the *Placing* cells that are still empty. A placing that is already there is never changed, and previews or old race files are never sent. If you change the script later, use **Deploy > Manage deployments > Edit > New version**, so the link stays the same. Keep the link and the secret code private.
+
+## 7c. Data - Skills (every skill of every uma)
+
+The program saves the results and the skills of every real race on your computer (not previews or old files). In **Settings > Data - Skills** press **Save the last race (.xlsx)...** for one race (every skill, how many umas brought it and who), or **Save all races (.xlsx)...** for everything. The file of all races has four sheets: *Races*, *Runners*, *Skills* (one row per skill: equipped or not, the time and place in the race where it activated, its condition) and *Skill summary* (how often each skill was brought and activated). You can turn the saving off in the same box.
+
 ## 8. Update
 
 Download the new zip and extract it. Your settings and pictures are kept automatically (in `%APPDATA%\\race-overlay-native`).

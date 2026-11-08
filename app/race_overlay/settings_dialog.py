@@ -1253,6 +1253,79 @@ class SettingsDialog(QDialog):
         pn.setWordWrap(True)
         sl.addWidget(pn)
         v.addWidget(sbox)
+
+        wbox = QGroupBox("Send placings to the Google Sheet (you own the sheet)")
+        wl = QVBoxLayout(wbox)
+        wi = QLabel("After a race the program writes each player's placing into the <i>Placing</i> column of the "
+                    "<i>Group Stage Round</i> tab, and your own formulas do the points. This needs a small script in your sheet: "
+                    "press <b>Copy the script</b>, then follow the steps in the GUIDE (Extensions &gt; Apps Script, paste, "
+                    "change the secret code, Deploy &gt; Web app, access: Anyone).")
+        wi.setWordWrap(True)
+        wl.addWidget(wi)
+        wf = QFormLayout()
+        self.ed_wurl = QLineEdit(str(s.get("sheet_write_url", "")))
+        self.ed_wurl.setPlaceholderText("https://script.google.com/macros/s/.../exec")
+        self.ed_wurl.editingFinished.connect(lambda: ov.set_setting("sheet_write_url", self.ed_wurl.text().strip()))
+        wf.addRow("Web app link", self.ed_wurl)
+        self.ed_wsec = QLineEdit(str(s.get("sheet_write_secret", "")))
+        self.ed_wsec.setPlaceholderText("the same secret code as in the script")
+        self.ed_wsec.editingFinished.connect(lambda: ov.set_setting("sheet_write_secret", self.ed_wsec.text().strip()))
+        wf.addRow("Secret code", self.ed_wsec)
+        self.cmb_wround = QComboBox()
+        for k in (1, 2, 3):
+            self.cmb_wround.addItem("Round %d  (tab Group Stage Round %d)" % (k, k), k)
+        self.cmb_wround.setCurrentIndex(max(0, min(2, int(s.get("sheet_write_round", 1)) - 1)))
+        self.cmb_wround.currentIndexChanged.connect(lambda _i: ov.set_setting("sheet_write_round", self.cmb_wround.currentData()))
+        wf.addRow("Round", self.cmb_wround)
+        self.cb_wauto = QCheckBox("Send every finished race by itself")
+        self.cb_wauto.setChecked(bool(s.get("sheet_write_auto", False)))
+        self.cb_wauto.setToolTip("Only races that really happen are sent (not previews or old files). A placing that is already "
+                                 "in the sheet is never overwritten.")
+        self.cb_wauto.toggled.connect(lambda on: ov.set_setting("sheet_write_auto", on))
+        wf.addRow("", self.cb_wauto)
+        wl.addLayout(wf)
+        wb = QHBoxLayout()
+        for text, fn in (("Copy the script", self.copy_sheet_script), ("Test the link", self.test_sheet_link),
+                         ("Send the last race now", self.send_sheet_now)):
+            b = QPushButton(text)
+            b.setMinimumWidth(10)
+            b.clicked.connect(fn)
+            wb.addWidget(b)
+        wl.addLayout(wb)
+        self.lbl_wstat = QLabel(ov.sheet_status or "Nothing sent yet.")
+        self.lbl_wstat.setWordWrap(True)
+        wl.addWidget(self.lbl_wstat)
+        v.addWidget(wbox)
+
+        dbox = QGroupBox("Skills of every race")
+        dl = QVBoxLayout(dbox)
+        self.cb_rdata = QCheckBox("Save the results and skills of every race")
+        self.cb_rdata.setChecked(bool(s.get("race_data", True)))
+        self.cb_rdata.setToolTip("Only races that really happen are saved (not previews or old files). Everything stays on this computer.")
+        self.cb_rdata.toggled.connect(lambda on: ov.set_setting("race_data", on))
+        dl.addWidget(self.cb_rdata)
+        self.lbl_rdata = QLabel()
+        self.lbl_rdata.setWordWrap(True)
+        dl.addWidget(self.lbl_rdata)
+        db = QHBoxLayout()
+        for text, fn in (("Save the last race (.xlsx)...", self.export_last_race), ("Save all races (.xlsx)...", self.export_race_data)):
+            b = QPushButton(text)
+            b.setMinimumWidth(10)
+            b.clicked.connect(fn)
+            db.addWidget(b)
+        dl.addLayout(db)
+        db2 = QHBoxLayout()
+        for text, fn in (("Open the folder", self.open_race_data), ("Delete the saved races", self.clear_race_data)):
+            b = QPushButton(text)
+            b.setMinimumWidth(10)
+            b.clicked.connect(fn)
+            db2.addWidget(b)
+        dl.addLayout(db2)
+        dn = QLabel("<i>The spreadsheet has four sheets: Races, Runners, Skills (one row per skill: equipped or not, when and where "
+                    "in the race it activated, its condition) and Skill summary. Skills the server does not list as equipped show "
+                    "\"unknown\" in the Equipped column.</i>")
+        dn.setWordWrap(True)
+        dl.addWidget(dn)
         v.addStretch(1)
 
         def sync_smode(*_a):
@@ -1266,6 +1339,12 @@ class SettingsDialog(QDialog):
         self._stand_tab = sc
         self.update_book_label()
         tabs.addTab(sc, "Cup Score")
+        dt = QWidget()                              # its own tab, not part of the Cup Score
+        dv = QVBoxLayout(dt)
+        dv.addWidget(dbox)
+        dv.addStretch(1)
+        tabs.addTab(self.scrolled(dt), "Data - Skills")
+        self.update_race_data_label()
 
     # ---- draft tab (team match)
     def build_draft_tab(self, tabs):
@@ -1543,6 +1622,93 @@ class SettingsDialog(QDialog):
         self.ov.book.undo_last()
         self.ov.standings.refresh(True)
         self.update_book_label()
+
+    def race_log(self):
+        from .racedata import RaceLog
+        if self.ov.racelog is None:
+            from .constants import CONFIG_DIR
+            self.ov.racelog = RaceLog(os.path.join(CONFIG_DIR, "race-data.jsonl"))
+        return self.ov.racelog
+
+    def update_race_data_label(self):
+        n = self.race_log().count()
+        self.lbl_rdata.setText("%d race%s saved so far." % (n, "" if n == 1 else "s") if n else "No race saved yet.")
+
+    def export_last_race(self):
+        """One race only: per uma the skills brought and activated, with the totals."""
+        from .racedata import load_skills, race_tables, write_xlsx
+        records = sorted(self.race_log().records(), key=lambda r: r.get("at", 0))
+        if not records:
+            QMessageBox.information(self, "Race data", "No race is saved yet. Play a race first.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save the last race", os.path.expanduser("~/last-race-skills.xlsx"), "Spreadsheet (*.xlsx)")
+        if not path:
+            return
+        if not path.lower().endswith(".xlsx"):
+            path += ".xlsx"
+        skills = load_skills(self.ov.umdb_paths())
+        try:
+            write_xlsx(path, race_tables(records[-1], skills))
+        except OSError as e:
+            QMessageBox.warning(self, "Race data", "Could not save the file:\n%s" % e)
+            return
+        QMessageBox.information(self, "Race data", "Saved the last race to:\n%s%s" % (
+            path, "" if skills else "\n\nNo umdb.json was found, so the skill names are missing (only the ids)."))
+
+    def export_race_data(self):
+        from .racedata import export_xlsx, load_skills
+        records = self.race_log().records()
+        if not records:
+            QMessageBox.information(self, "Race data", "No race is saved yet. Play a race first.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save the race data", os.path.expanduser("~/race-data.xlsx"), "Spreadsheet (*.xlsx)")
+        if not path:
+            return
+        if not path.lower().endswith(".xlsx"):
+            path += ".xlsx"
+        skills = load_skills(self.ov.umdb_paths())
+        try:
+            export_xlsx(path, records, skills)
+        except OSError as e:
+            QMessageBox.warning(self, "Race data", "Could not save the file:\n%s" % e)
+            return
+        note = "" if skills else "\n\nNo umdb.json was found, so the skill names are missing (only the ids)."
+        QMessageBox.information(self, "Race data", "Saved %d races to:\n%s%s" % (len(records), path, note))
+
+    def open_race_data(self):
+        from .constants import CONFIG_DIR
+        open_folder(CONFIG_DIR)
+
+    def clear_race_data(self):
+        if QMessageBox.question(self, "Delete", "Delete all saved race data? This cannot be undone.") != QMessageBox.StandardButton.Yes:
+            return
+        self.race_log().clear()
+        self.update_race_data_label()
+
+    def update_sheet_status(self):
+        self.lbl_wstat.setText(self.ov.sheet_status or "Nothing sent yet.")
+
+    def copy_sheet_script(self):
+        from .sheetwrite import APPS_SCRIPT
+        QApplication.clipboard().setText(APPS_SCRIPT)
+        QMessageBox.information(self, "Script copied", "The script is copied. In your Google Sheet open Extensions > Apps Script, "
+                                "delete what is there, paste it (Ctrl+V), change CHANGE-ME to your own secret code and press Save. "
+                                "Then Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone).")
+
+    def test_sheet_link(self):
+        from . import sheetwrite
+        self.ov.set_setting("sheet_write_url", self.ed_wurl.text().strip())
+        try:
+            res = sheetwrite.ping(self.ed_wurl.text())
+        except Exception as e:
+            self.lbl_wstat.setText("The link does not work: %s" % e)
+            return
+        self.lbl_wstat.setText("The link works." if res.get("ok") else "The link answered, but not like the script.")
+
+    def send_sheet_now(self):
+        for key, ed in (("sheet_write_url", self.ed_wurl), ("sheet_write_secret", self.ed_wsec)):
+            self.ov.set_setting(key, ed.text().strip())
+        self.ov.sheet_send()
 
     def save_races_file(self):
         if not self.ov.book.races:
