@@ -126,7 +126,7 @@ def run_checks(ov):
                                         "The server then starts by itself, no restart needed."
                                        if IS_WINDOWS else
                                        "Put the folder with 'Race Overlay.exe' next to the app folder "
-                                       "or set RACE_OVERLAY_DIR in settings.sh."))))
+                                       "or choose its folder in the Home tab (More)."))))
     else:
         out.append(("info", "Source: %s" % kind, ""))
         if IS_WINDOWS:

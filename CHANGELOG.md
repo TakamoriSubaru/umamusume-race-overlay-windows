@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.0
+
+- **Every tab is simpler, with pictures and fewer words:** Home has three picture cards for the version (Tower, Advanced, Tournament) and the start steps as three small picture cards, with a button that copies the window name for OBS. Data, People and Draft have a picture on top that shows what happens. Rarely used options are folded away (live races, the match board look, more colours).
+
 ## 2.4.0
 
 - **Cup Score is now called Points, and much easier:** a picture at the top shows what happens (race ends, points added, shown on stream). Then two big choices: *This program counts* (nothing to set up) or *My Google Sheet* (three picture steps: share, copy the link, paste it). Everything else is folded away under short titles.

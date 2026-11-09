@@ -83,6 +83,68 @@ def paint_icon(p, kind, rect, color=None, accent=None):
         p.setPen(_pen(accent, 2.5))
         for y, x2 in ((22, 32), (29, 32), (36, 25)):
             p.drawLine(P(16, y), P(x2, y))
+    elif kind == "tower":
+        p.setPen(_pen(color, 3))
+        p.drawRoundedRect(QRectF(5, 5, 38, 38), 7, 7)
+        p.setPen(Qt.PenStyle.NoPen)
+        for i, w in enumerate((26, 22, 18, 14)):
+            p.setBrush(QBrush(accent if i == 0 else color))
+            p.drawRoundedRect(QRectF(10, 10 + i * 8, w, 5.5), 2.5, 2.5)
+    elif kind == "boards":
+        p.setPen(_pen(color, 3))
+        p.drawRoundedRect(QRectF(4, 7, 28, 20), 5, 5)
+        p.setBrush(QBrush(dark))
+        p.setPen(_pen(accent, 3))
+        p.drawRoundedRect(QRectF(16, 20, 28, 20), 5, 5)
+    elif kind == "cup":
+        from PyQt6.QtGui import QPainterPath
+        path = QPainterPath()
+        path.moveTo(14, 8)
+        path.lineTo(34, 8)
+        path.lineTo(34, 17)
+        path.quadTo(34, 29, 24, 29)
+        path.quadTo(14, 29, 14, 17)
+        path.closeSubpath()
+        p.setPen(_pen(color, 3))
+        p.drawPath(path)
+        p.drawArc(QRectF(5, 10, 10, 10), 90 * 16, 180 * 16)
+        p.drawArc(QRectF(33, 10, 10, 10), -90 * 16, 180 * 16)
+        p.drawLine(P(24, 29), P(24, 36))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(QRectF(15, 36, 18, 6), 3, 3)
+    elif kind == "game":
+        p.setPen(_pen(color, 3))
+        p.drawRoundedRect(QRectF(4, 13, 40, 24), 11, 11)
+        p.setPen(_pen(accent, 3))
+        p.drawLine(P(12, 25), P(20, 25))
+        p.drawLine(P(16, 21), P(16, 29))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawEllipse(P(31, 22), 2.6, 2.6)
+        p.drawEllipse(P(36, 27), 2.6, 2.6)
+    elif kind == "capture":
+        p.setPen(_pen(color, 3))
+        for sx, sy in ((7, 7), (41, 7), (7, 41), (41, 41)):
+            dx, dy = (9 if sx < 24 else -9), (9 if sy < 24 else -9)
+            p.drawPolyline(QPolygonF([P(sx + dx, sy), P(sx, sy), P(sx, sy + dy)]))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawEllipse(P(24, 24), 5, 5)
+    elif kind in ("person", "team"):
+        p.setPen(_pen(color, 3))
+        spots = ((24, 15, 7, 10, 28),) if kind == "person" else ((17, 15, 6, 6, 22), (31, 15, 6, 20, 22))
+        for cx, cy, r, ax, aw in spots:
+            p.drawEllipse(P(cx, cy), r, r)
+            p.drawArc(QRectF(ax, 26, aw, aw), 0, 180 * 16)
+    elif kind == "image":
+        p.setPen(_pen(color, 3))
+        p.drawRoundedRect(QRectF(6, 9, 36, 30), 6, 6)
+        p.setPen(_pen(accent, 3))
+        p.drawPolyline(QPolygonF([P(10, 35), P(20, 23), P(27, 30), P(32, 25), P(39, 34)]))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawEllipse(P(33, 16), 3, 3)
     elif kind == "arrow":
         p.setPen(_pen(color, 3))
         p.drawLine(P(8, 24), P(38, 24))

@@ -136,17 +136,17 @@ class SettingsDialog(QDialog):
         self.lbl_state.setWordWrap(True)
         self.lbl_state.setStyleSheet("font-size:15px;")
         mv.addWidget(self.lbl_state)
+        from .pointsui import Flow, ModeCard, StepCard
         vrow = QHBoxLayout()
-        vrow.addWidget(QLabel("Version:"))
-        self.cmb_level = QComboBox()
-        for key, text in (("tower", "Tower (just the tower)"), ("advanced", "Advanced (tower, results, luck board)"),
-                          ("tournament", "Tournament (everything)")):
-            self.cmb_level.addItem(text, key)
-        self.cmb_level.setCurrentIndex(self.cmb_level.findData(level))
-        self.cmb_level.setToolTip("Tower: only the tower, People and Look. Advanced: plus the results and skill luck boards. "
-                                  "Tournament: everything, including points, standings and the team match.")
-        self.cmb_level.activated.connect(lambda _i: ov.set_level(self.cmb_level.currentData()))
-        vrow.addWidget(self.cmb_level, 1)
+        self.level_cards = {}
+        for key, icon, title, sub in (("tower", "tower", "Tower", "Just the tower"),
+                                      ("advanced", "boards", "Advanced", "Tower + results + luck"),
+                                      ("tournament", "cup", "Tournament", "Everything")):
+            card = ModeCard(icon, title, sub)
+            card.setChecked(key == level)
+            card.clicked.connect(lambda _c=False, k=key: ov.set_level(k))
+            self.level_cards[key] = card
+            vrow.addWidget(card)
         mv.addLayout(vrow)
 
         sbx = QGroupBox("Setup")
@@ -182,18 +182,24 @@ class SettingsDialog(QDialog):
         mv.addWidget(sbx)
         sbx.setVisible(not limited)
 
-        qs = Collapsible("Quick start (3 steps)", open_=bool(ov.s.get("quick_start_open", True)),
+        qs = Collapsible("How to start (3 steps)", open_=bool(ov.s.get("quick_start_open", True)),
                          on_toggle=lambda on: ov.set_setting("quick_start_open", on))
-        qtext = QLabel("<b>1.</b> Start Uma Musume. The overlay waits for it and shows a green dot when it is ready.<br>"
-                       "<b>2.</b> Press <i>Show preview race</i> below to see the tower, and <i>Show overlay window</i> "
-                       "so OBS can see it.<br>"
-                       "<b>3.</b> In OBS add a <i>Window Capture (" + "Windows 10 1903 and up" + ")</i> source and pick "
-                       "<i>" + APP_NAME + "</i>.<br>"
-                       "<i>The results and standings boards are separate windows. Add them the same way.</i>")
-        qtext.setWordWrap(True)
-        qs.body_l.addWidget(qtext)
+        qrow = QHBoxLayout()
+        for n, kind, title, sub in ((1, "game", "Start Uma Musume", "a green dot shows when ready"),
+                                    (2, "screen", "Show the overlay", "use the button below"),
+                                    (3, "capture", "Add it in OBS", "Window Capture, pick the overlay window")):
+            qrow.addWidget(StepCard(n, kind, title, sub))
+        qs.body_l.addLayout(qrow)
+
+        def copy_name():
+            from PyQt6.QtWidgets import QApplication
+            QApplication.clipboard().setText(APP_NAME)
+            bcopy.setText("Copied: " + APP_NAME)
+        bcopy = QPushButton("Copy the window name for OBS")
+        bcopy.setToolTip(APP_NAME)
+        bcopy.clicked.connect(copy_name)
+        qs.body_l.addWidget(bcopy)
         mv.addWidget(qs)
-        qs.setVisible(not simple)
 
         row_b = QHBoxLayout()
         self.btn_show = QPushButton("Show overlay window")
@@ -356,9 +362,8 @@ class SettingsDialog(QDialog):
         rv = QVBoxLayout(rt)
         kbox = QGroupBox("Race Overlay server")
         kl = QVBoxLayout(kbox)
-        kn = QLabel("The races come from the Race Overlay server (the <i>Server Files</i> folder). It follows the real race "
-                    "clock, so the tower starts exactly when the race starts. It only works while Uma Musume is running. "
-                    "To test without the game use <i>Show preview race</i> or <i>Replay a saved race (test)</i> in the Home tab.")
+        kn = QLabel("Live races come from the Race Overlay server (the <i>Server Files</i> folder). It only works while "
+                    "Uma Musume is running. To test without the game use <i>Show preview race</i> in the Home tab.")
         kn.setWordWrap(True)
         kl.addWidget(kn)
         rv.addWidget(kbox)
@@ -381,7 +386,10 @@ class SettingsDialog(QDialog):
         lv.addWidget(g_cols)
         g_pod = QGroupBox("Podium, picture shape and rows")
         fx = QFormLayout(g_pod)
-        lv.addWidget(g_pod)
+        fold_pod = Collapsible("More colours: podium, picture shape, rows")
+        g_pod.setStyleSheet("QGroupBox { border: none; margin-top: 0; padding-top: 0; } QGroupBox::title { height: 0; padding: 0; background: transparent; }")
+        fold_pod.body_l.addWidget(g_pod)
+        lv.addWidget(fold_pod)
         g_my = QGroupBox("My look")
         gmv = QHBoxLayout(g_my)
         lv.addWidget(g_my)
@@ -823,10 +831,8 @@ class SettingsDialog(QDialog):
         people = QTabWidget()
         pl = QWidget()
         v = QVBoxLayout(pl)
-        info = QLabel("Every trainer that appears in a race is collected here automatically.\n"
-                      "Choose a picture for each one. Trainers without a picture get their uma face.")
-        info.setWordWrap(True)
-        v.addWidget(info)
+        from .pointsui import Flow
+        v.addWidget(Flow((("flag", "Race happens"), ("person", "Players saved here"), ("image", "Pick a picture"))))
         srow = QHBoxLayout()
         self.ed_find = QLineEdit()
         self.ed_find.setPlaceholderText("Search a trainer, Discord name or club...")
@@ -984,11 +990,15 @@ class SettingsDialog(QDialog):
     def build_skills_box(self):
         """The skills spreadsheet box (shown in the Data tab)."""
         ov, s = self.ov, self.ov.s
-        dbox = QGroupBox("Skills spreadsheet (who has which skills)")
+        from .pointsui import Flow
+        dbox = QGroupBox("Skills spreadsheet")
         dl = QVBoxLayout(dbox)
-        di = QLabel("Put in your own race files (horseACT .json) and get a spreadsheet with the skills every uma <b>brought</b> "
-                    "(with the level), and how many umas brought each skill.")
-        di.setWordWrap(True)
+        dl.addWidget(Flow((("paste", "Your race files"), ("sheet", "Spreadsheet of skills"))))
+        di = QLabel("Shows the skills every uma <b>brought</b>, with the level.")
+        di.setToolTip("Sheets: Who has what (one row per uma), Skill counts (how many umas brought each skill, and who) and "
+                      "All skills (one row per skill, to filter). Skill names come from Race Overlay's umdb.json. "
+                      "A race saved twice counts once.")
+        di.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         dl.addWidget(di)
         db = QHBoxLayout()
         for text, fn in (("Choose race files...", self.skills_from_files), ("Choose a folder...", self.skills_from_folder)):
@@ -998,26 +1008,23 @@ class SettingsDialog(QDialog):
             b.clicked.connect(fn)
             db.addWidget(b)
         dl.addLayout(db)
-        dn = QLabel("<i>The sheets: <b>Who has what</b> (one row per uma), <b>Skill counts</b> (for example A Kiss for Courage: 2, "
-                    "and who) and <b>All skills</b> (one row per skill, to filter). The skill names come from Race Overlay's "
-                    "umdb.json. A race saved twice counts once.</i>")
-        dn.setWordWrap(True)
-        dl.addWidget(dn)
-        self.cb_rdata = QCheckBox("Also keep the races I play live (for the button below)")
+        live = Collapsible("My live races")
+        self.cb_rdata = QCheckBox("Keep the races I play live")
         self.cb_rdata.setChecked(bool(s.get("race_data", True)))
         self.cb_rdata.setToolTip("Only races that really happen are kept (not previews or old files). Everything stays on this computer.")
         self.cb_rdata.toggled.connect(lambda on: ov.set_setting("race_data", on))
-        dl.addWidget(self.cb_rdata)
+        live.body_l.addWidget(self.cb_rdata)
         self.lbl_rdata = QLabel()
         self.lbl_rdata.setWordWrap(True)
-        dl.addWidget(self.lbl_rdata)
+        live.body_l.addWidget(self.lbl_rdata)
         db2 = QHBoxLayout()
         for text, fn in (("Spreadsheet of my live races...", self.skills_from_live), ("Delete the kept live races", self.clear_race_data)):
             b = QPushButton(text)
             b.setMinimumWidth(10)
             b.clicked.connect(fn)
             db2.addWidget(b)
-        dl.addLayout(db2)
+        live.body_l.addLayout(db2)
+        dl.addWidget(live)
         return dbox
 
     def build_standings_tab(self, tabs):
@@ -1294,19 +1301,22 @@ class SettingsDialog(QDialog):
         m = ov.match
         dt = QWidget()
         v = QVBoxLayout(dt)
-        intro = QLabel("A <b>team match</b> (draft): two teams, a few players each. After every race the best placed "
-                       "<b>team players</b> score for their team: <b>1st 4 points, 2nd 2, 3rd 1</b> (you can change "
-                       "it). Players on no team (NPCs) never score, so the next team player takes the placement. "
-                       "The first team to reach the target wins. In OBS the board is its own window: "
-                       "<i>" + MATCH_NAME + "</i>.")
-        intro.setWordWrap(True)
+        from .pointsui import Flow
+        v.addWidget(Flow((("team", "Two teams"), ("flag", "Race"), ("count", "4 / 2 / 1 points"), ("cup", "First to 25"))))
+        intro = QLabel("Add the players of both teams below. Players on no team never score.")
+        intro.setToolTip("After every race the best placed team players score for their team (1st 4 points, 2nd 2, 3rd 1: you can change it). "
+                         "The next team player takes the placement of a player on no team. The first team to reach the target wins. "
+                         "In OBS the board is its own window.")
+        intro.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         v.addWidget(intro)
 
-        cb = QCheckBox("Team match mode (points go to the teams; single-player points and standings pause)")
+        cb = QCheckBox("Team match mode")
+        cb.setToolTip("Points go to the teams. Single-player points and standings pause.")
         cb.setChecked(bool(s.get("match_mode", False)))
         cb.toggled.connect(lambda on: ov.set_setting("match_mode", on))
         v.addWidget(cb)
-        cb2 = QCheckBox("Show the match board after the results board (stays until the next race)")
+        cb2 = QCheckBox("Show the match board after the results")
+        cb2.setToolTip("It stays until the next race.")
         cb2.setChecked(bool(s.get("match_board", True)))
         cb2.toggled.connect(lambda on: ov.set_setting("match_board", on))
         v.addWidget(cb2)
@@ -1396,10 +1406,8 @@ class SettingsDialog(QDialog):
             b.setMinimumWidth(10)
             r1.addWidget(b)
         sl.addLayout(r1)
-        nn = QLabel("<i>Players are matched by trainer name (capital letters do not matter). Replays, previews and "
-                    "old race files never give points, and the same race is never counted twice.</i>")
-        nn.setWordWrap(True)
-        sl.addWidget(nn)
+        self.lbl_match.setToolTip("Players are matched by trainer name (capital letters do not matter). Replays, previews and "
+                                  "old race files never give points, and the same race is never counted twice.")
         v.addWidget(sbox)
 
         gl = QGroupBox("Board")
@@ -1424,7 +1432,10 @@ class SettingsDialog(QDialog):
         sp_ms.setValue(float(s.get("match_seconds", 0.0)))
         sp_ms.valueChanged.connect(lambda x: ov.set_setting("match_seconds", float(x)))
         gf.addRow("Stays", sp_ms)
-        v.addWidget(gl)
+        fold_board = Collapsible("Look of the match board")
+        gl.setStyleSheet("QGroupBox { border: none; margin-top: 0; padding-top: 0; } QGroupBox::title { height: 0; padding: 0; background: transparent; }")
+        fold_board.body_l.addWidget(gl)
+        v.addWidget(fold_board)
         v.addStretch(1)
         sc = self.scrolled(dt)
         self._draft_tab = sc
@@ -2073,13 +2084,10 @@ class SettingsDialog(QDialog):
         self.lbl_state.setText('<span style="color:%s">&#9679;</span> %s' % (dot, ov.status_summary().replace("\n", " ")))
         if ov.auto_hide_active():
             self.btn_show.setText("Done placing: hide the window" if ov.pinned else "Show overlay window (to place it)")
-            self.note_show.setText("The overlay window is hidden until a race starts, then the tower slides in "
-                                   "and slides out again after the race. Press the button to show the window "
-                                   "while you move it to where you want it.")
+            self.note_show.setText("Hidden until a race starts, then the tower slides in. Press the button to place the window.")
         else:
             self.btn_show.setText("Hide overlay window" if ov.isVisible() else "Show overlay window")
-            self.note_show.setText("OBS can only capture the overlay while its window is shown. "
-                                   "Press the button once and the choice is remembered for the next start.")
+            self.note_show.setText("OBS can only see the window while it is shown.")
         self.btn_prev2.setText("Stop preview" if ov.preview else "Show preview race")
         self.btn_board.setText("Done placing: hide the results board" if ov.board.pinned
                                else "Show results board (to place it)")
