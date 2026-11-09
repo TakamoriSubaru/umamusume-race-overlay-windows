@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.1
+
+- Cleaner Look and Help tabs. Fonts are folded away, and Help now says "Everything looks fine" or how many things to look at. The log is folded, and "Copy for support" stays in view.
+
 ## 2.5.0
 
 - **Every tab is simpler, with pictures and fewer words:** Home has three picture cards for the version (Tower, Advanced, Tournament) and the start steps as three small picture cards, with a button that copies the window name for OBS. Data, People and Draft have a picture on top that shows what happens. Rarely used options are folded away (live races, the match board look, more colours).

@@ -381,9 +381,13 @@ class SettingsDialog(QDialog):
         lg = QVBoxLayout(g_cols)
         f = QFormLayout()
         lg.addLayout(f)
-        fc = QFormLayout()                # colours and font
+        fc = QFormLayout()                # colours
         lg.addLayout(fc)
         lv.addWidget(g_cols)
+        ff = QFormLayout()                # fonts and racer text: folded away
+        fold_font = Collapsible("Fonts and racer text")
+        fold_font.body_l.addLayout(ff)
+        lv.addWidget(fold_font)
         g_pod = QGroupBox("Podium, picture shape and rows")
         fx = QFormLayout(g_pod)
         fold_pod = Collapsible("More colours: podium, picture shape, rows")
@@ -534,8 +538,8 @@ class SettingsDialog(QDialog):
         self.fill_fonts(s.get("font", ""))
         self.cmb_font.activated.connect(self.on_font)
         self.cmb_font.setToolTip("A short list of common fonts. \"More fonts...\" shows every font on this computer.")
-        fc.addRow("Font", self.cmb_font)
-        fc.addRow("", self.lbl_fontprev)
+        ff.addRow("Font", self.cmb_font)
+        ff.addRow("", self.lbl_fontprev)
 
         # the header and the racers can have their own font, size and colour
         self.role_cmb, self.role_btn = {}, {}
@@ -546,7 +550,7 @@ class SettingsDialog(QDialog):
             cmb.setToolTip("The font of the tower header (track info) or of the racer names. \"Same as the main font\" follows Font above.")
             self.role_cmb[key] = cmb
             self.fill_role_font(key, s.get(key, ""))
-            fc.addRow(label, cmb)
+            ff.addRow(label, cmb)
         self.sl_racer = QSlider(Qt.Orientation.Horizontal)
         self.sl_racer.setRange(60, 160)
         self.sl_racer.setValue(int(float(s.get("racer_scale", 1.0)) * 100))
@@ -555,7 +559,7 @@ class SettingsDialog(QDialog):
         rrow = QHBoxLayout()
         rrow.addWidget(self.sl_racer)
         rrow.addWidget(self.lbl_racer)
-        fc.addRow("Racer text size", rrow)
+        ff.addRow("Racer text size", rrow)
         for key, label in (("header_color", "Header colour"), ("racer_color", "Racer colour")):
             b = QPushButton()
             b.clicked.connect(lambda _c=False, k=key: self.pick_role(k))
@@ -565,7 +569,7 @@ class SettingsDialog(QDialog):
             crow = QHBoxLayout()
             crow.addWidget(b, 1)
             crow.addWidget(rb)
-            fc.addRow(label, crow)
+            ff.addRow(label, crow)
             self.swatch_role(key)
 
         self.cb_arrows = QCheckBox("Show an arrow when a uma gains or loses a place")
@@ -934,6 +938,10 @@ class SettingsDialog(QDialog):
         self.lbl_checks.setWordWrap(True)
         self.lbl_checks.setTextFormat(Qt.TextFormat.RichText)
         self.lbl_checks.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.lbl_sum = QLabel()                       # one line: all good or n things to look at
+        self.lbl_sum.setTextFormat(Qt.TextFormat.RichText)
+        self.lbl_sum.setStyleSheet("font-size:15px;font-weight:700;padding:8px 4px;")
+        sv.addWidget(self.lbl_sum)
         sv.addWidget(self.lbl_checks)
         srow = QHBoxLayout()
         self.cmb_log = QComboBox()
@@ -950,15 +958,19 @@ class SettingsDialog(QDialog):
         self.btn_copy = QPushButton("Copy for support")
         self.btn_copy.setObjectName("primary")
         self.btn_copy.clicked.connect(self.copy_status)
+        sv.addWidget(self.btn_copy)
         srow.addWidget(self.cmb_log, 1)
         srow.addWidget(self.cb_fixme)
         srow.addWidget(btn_again)
-        srow.addWidget(self.btn_copy)
-        sv.addLayout(srow)
         self.txt_log = QPlainTextEdit()
         self.txt_log.setReadOnly(True)
         self.txt_log.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        sv.addWidget(self.txt_log, 1)
+        self.txt_log.setMinimumHeight(260)
+        fold_log = Collapsible("Log (for support)")
+        fold_log.body_l.addLayout(srow)
+        fold_log.body_l.addWidget(self.txt_log)
+        sv.addWidget(fold_log)
+        sv.addStretch(1)
         tabs.addTab(stt, "Help")
         self._tabs = tabs
         self._status_tab = stt
@@ -2219,6 +2231,10 @@ class SettingsDialog(QDialog):
                 line += '<br><span style="color:#9aa0b4">&nbsp;&nbsp;&nbsp;&nbsp;%s</span>' % hint
             rows.append(line)
         html = "<br>".join(rows)
+        _chk = run_checks(self.ov)
+        _n = sum(1 for st, _t, _h in _chk if st in ("bad", "warn"))
+        self.lbl_sum.setText('<span style="color:#2ecc71">&#10004;</span> Everything looks fine' if not _n else
+                             '<span style="color:#f1c40f">&#9888;</span> %d thing%s to look at' % (_n, "" if _n == 1 else "s"))
         if html != getattr(self, "_checks_html", None):
             self._checks_html = html
             self.lbl_checks.setText(html)
