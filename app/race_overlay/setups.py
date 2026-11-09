@@ -19,8 +19,8 @@ SETUPS = [
      "settings": dict(_OFF, results_board=True, luck_board=True, luck_when="with"), "tab": "Home"},
     {"key": "points", "title": "Points for every player",
      "blurb": "Results board, then a standings board. Every race gives points; the standings add them up. "
-              "Can also read your own Google Sheet (Cup Score tab).",
-     "settings": dict(_OFF, results_board=True, scoring=True, standings_board=True), "tab": "Cup Score"},
+              "Can also read your own Google Sheet (Points tab).",
+     "settings": dict(_OFF, results_board=True, scoring=True, standings_board=True), "tab": "Points"},
     {"key": "match", "title": "Team match (draft)",
      "blurb": "Two teams, 4 / 2 / 1 points per race, first to 25. A match board shows the score. "
               "Next: type the teams in the Draft tab.",

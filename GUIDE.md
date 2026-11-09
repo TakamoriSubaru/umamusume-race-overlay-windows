@@ -58,7 +58,7 @@ The other tabs change looks, timing and the points or team rules.
 
 The program can write each player's placing into your Google Sheet after every race. Your own formulas then work out the points. It needs a small script in the sheet. You do this once:
 
-1. In the program open **Settings > Cup Score** and press **Copy the script** (in *Send placings to the Google Sheet*).
+1. In the program open **Settings > Points** and press **Copy the script** (in *Send placings to the Google Sheet*).
 2. Open your Google Sheet. Go to **Extensions > Apps Script**. Delete the text that is there and paste the script (Ctrl+V).
 3. In the first lines change `CHANGE-ME` to a secret code of your own (letters and numbers). Press the save icon.
 4. Press **Deploy > New deployment**. Click the gear and pick **Web app**. Set *Execute as*: **Me** and *Who has access*: **Anyone**. Press **Deploy** and allow access when Google asks.

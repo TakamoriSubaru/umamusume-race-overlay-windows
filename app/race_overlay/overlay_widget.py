@@ -917,7 +917,7 @@ class OverlayWidget(FramelessMixin, QWidget):
     skill_log = ()
 
     def save_race_data(self, entries, line1, line2):
-        """Keep the results and every skill of this race in race-data.jsonl (Settings > Cup Score > Race data)."""
+        """Keep the results and every skill of this race in race-data.jsonl (Settings > Points > Race data)."""
         try:
             if self.racelog is None:
                 self.racelog = RaceLog(os.path.join(_CFG_DIR, "race-data.jsonl"))
@@ -1432,7 +1432,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             self.set_setting("tower_style", tower_style)
         self.standings.refresh(True)
         if rebuild:
-            QTimer.singleShot(0, lambda: self.rebuild_settings(st.get("tab") if st.get("tab") in ("Draft", "Cup Score") else None))
+            QTimer.singleShot(0, lambda: self.rebuild_settings(st.get("tab") if st.get("tab") in ("Draft", "Points") else None))
 
     def rebuild_settings(self, tab=None):
         """Open the settings window again from scratch, so every checkbox shows the new values."""

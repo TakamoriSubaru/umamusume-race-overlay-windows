@@ -155,8 +155,8 @@ class WelcomeDialog(QDialog):
             steps.append(("Points and standings",
                           "Every race gives points (1st gets the most) and the standings board adds them up. You can also "
                           "read the points from your own Google Sheet and write the placings back to it.<br><br>"
-                          "Everything is in the <b>Cup Score</b> tab.",
-                          [("Open the Cup Score tab", lambda: self.open_tab("Cup Score"))]))
+                          "Everything is in the <b>Points</b> tab.",
+                          [("Open the Points tab", lambda: self.open_tab("Points"))]))
             steps.append(("Team match (draft)",
                           "Two teams, 4 / 2 / 1 points per race, first to 25. A match board shows the score. Type the "
                           "players of both teams in the <b>Draft</b> tab.",

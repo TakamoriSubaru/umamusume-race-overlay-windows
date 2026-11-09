@@ -16,7 +16,7 @@ FIRST_CHECK_MS = 12 * 1000               # a few seconds after start, so the sta
 
 
 def short_notes(text, limit=6, width=72):
-    """The release notes as a short list: the bold heading of every bullet of the changelog ("**Cup Score: share races.** ..."),
+    """The release notes as a short list: the bold heading of every bullet of the changelog ("**Points: share races.** ..."),
     or the first words of a plain line. Returns at most `limit` lines of at most `width` letters."""
     out = []
     for ln in str(text or "").splitlines():

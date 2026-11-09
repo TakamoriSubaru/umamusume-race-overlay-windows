@@ -12,7 +12,7 @@ APPS_SCRIPT = r'''// Umalliance race overlay -> this Google Sheet.
 //
 // 1. Change the secret code below to anything you like (letters and numbers), and type the same code in the overlay.
 // 2. Press Deploy > New deployment > type "Web app". Execute as: Me. Who has access: Anyone. Press Deploy and allow access.
-// 3. Copy the "Web app" link (it ends in /exec) into the overlay: Cup Score tab > Send placings to the Google Sheet.
+// 3. Copy the "Web app" link (it ends in /exec) into the overlay: Points tab > Send placings to the Google Sheet.
 
 var SECRET = "CHANGE-ME";
 var TAB_PREFIX = "Group Stage Round ";   // the tabs are called "Group Stage Round 1", "Group Stage Round 2", ...

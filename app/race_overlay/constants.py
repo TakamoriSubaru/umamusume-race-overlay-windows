@@ -163,7 +163,7 @@ DEFAULT_SETTINGS = {
     # --- results board (the window that shows after the race)
     "results_board": True,     # show the results board after each race
     "results_seconds": 10.0,   # how long it stays (0 = until the next race starts)
-    # --- points and standings board (Cup Score tab)
+    # --- points and standings board (Points tab)
     "scoring": True,           # give points after every race: 1st = number of players, last = 1
     "standings_board": True,   # show the standings board after the results board, until the next race
     "standings_mode": "local", # "local" = points counted by this program, "sheet" = read from a sheet

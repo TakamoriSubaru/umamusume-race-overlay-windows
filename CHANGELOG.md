@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.4.0
+
+- **Cup Score is now called Points, and much easier:** a picture at the top shows what happens (race ends, points added, shown on stream). Then two big choices: *This program counts* (nothing to set up) or *My Google Sheet* (three picture steps: share, copy the link, paste it). Everything else is folded away under short titles.
+
 ## 2.3.0
 
 - **Pick your version and get a tutorial:** the first start now asks *Tower* (just the tower), *Advanced* (tower, results board and skill luck board) or *Tournament* (everything), then walks you through a short tutorial: start the game, preview, OBS, the boards, points, Look and People. Change the version any time with *Version* at the top of the Home tab, and open the tutorial again with *Setup guide and tutorial* (Home tab, More).

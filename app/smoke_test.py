@@ -77,11 +77,11 @@ def fake_exec():
     assert tabs_now() == ["Home", "Look", "People", "Help"], tabs_now()
     w.set_level("advanced")                              # Advanced: results and luck board, no points
     pump(0.3)
-    assert "Data" in tabs_now() and "Cup Score" not in tabs_now(), tabs_now()
+    assert "Data" in tabs_now() and "Points" not in tabs_now(), tabs_now()
     assert w.s["results_board"] and w.s["luck_board"] and not w.s["scoring"]
     w.set_level("tournament")
     pump(0.3)
-    assert "Cup Score" in tabs_now(), tabs_now()
+    assert "Points" in tabs_now(), tabs_now()
     for lv, n in (("tower", 5), ("advanced", 6), ("tournament", 8)):      # the tutorial of every version
         w.show_welcome()
         w.welcome.choose(lv)

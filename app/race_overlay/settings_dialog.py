@@ -362,7 +362,7 @@ class SettingsDialog(QDialog):
         kn.setWordWrap(True)
         kl.addWidget(kn)
         rv.addWidget(kbox)
-        self._data_layout = rv                      # the skills box is added here (built with the Cup Score tab)
+        self._data_layout = rv                      # the skills box is added here (built with the Points tab)
         rv.addStretch(1)
         tabs.addTab(self.scrolled(rt), "Data")
 
@@ -753,7 +753,7 @@ class SettingsDialog(QDialog):
         sp_ls.setValue(float(s.get("luck_seconds", 10.0)))
         sp_ls.valueChanged.connect(lambda v: ov.set_setting("luck_seconds", float(v)))
         fl.addRow("Stays", sp_ls)
-        bnote = QLabel("<i>The standings board has its own settings in the Cup Score tab. Each board is its own window "
+        bnote = QLabel("<i>The standings board has its own settings in the Points tab. Each board is its own window "
                        "in OBS. Drag a board to move it, pull its edges to resize it.</i>")
         bnote.setWordWrap(True)
         bv.insertWidget(0, bnote)
@@ -957,7 +957,7 @@ class SettingsDialog(QDialog):
         self._tabs = tabs
         self._status_tab = stt
         if limited:                                  # Tower: Home, Look, People, Help. Advanced: also Data
-            hidden = ("Data", "Cup Score", "Draft") if simple else ("Cup Score", "Draft")
+            hidden = ("Data", "Points", "Draft") if simple else ("Points", "Draft")
             for i in range(tabs.count()):
                 if tabs.tabText(i).replace(" (WIP)", "") in hidden:
                     tabs.setTabVisible(i, False)
@@ -981,43 +981,116 @@ class SettingsDialog(QDialog):
         return sa
 
     # ---- standings tab
+    def build_skills_box(self):
+        """The skills spreadsheet box (shown in the Data tab)."""
+        ov, s = self.ov, self.ov.s
+        dbox = QGroupBox("Skills spreadsheet (who has which skills)")
+        dl = QVBoxLayout(dbox)
+        di = QLabel("Put in your own race files (horseACT .json) and get a spreadsheet with the skills every uma <b>brought</b> "
+                    "(with the level), and how many umas brought each skill.")
+        di.setWordWrap(True)
+        dl.addWidget(di)
+        db = QHBoxLayout()
+        for text, fn in (("Choose race files...", self.skills_from_files), ("Choose a folder...", self.skills_from_folder)):
+            b = QPushButton(text)
+            b.setObjectName("primary")
+            b.setMinimumWidth(10)
+            b.clicked.connect(fn)
+            db.addWidget(b)
+        dl.addLayout(db)
+        dn = QLabel("<i>The sheets: <b>Who has what</b> (one row per uma), <b>Skill counts</b> (for example A Kiss for Courage: 2, "
+                    "and who) and <b>All skills</b> (one row per skill, to filter). The skill names come from Race Overlay's "
+                    "umdb.json. A race saved twice counts once.</i>")
+        dn.setWordWrap(True)
+        dl.addWidget(dn)
+        self.cb_rdata = QCheckBox("Also keep the races I play live (for the button below)")
+        self.cb_rdata.setChecked(bool(s.get("race_data", True)))
+        self.cb_rdata.setToolTip("Only races that really happen are kept (not previews or old files). Everything stays on this computer.")
+        self.cb_rdata.toggled.connect(lambda on: ov.set_setting("race_data", on))
+        dl.addWidget(self.cb_rdata)
+        self.lbl_rdata = QLabel()
+        self.lbl_rdata.setWordWrap(True)
+        dl.addWidget(self.lbl_rdata)
+        db2 = QHBoxLayout()
+        for text, fn in (("Spreadsheet of my live races...", self.skills_from_live), ("Delete the kept live races", self.clear_race_data)):
+            b = QPushButton(text)
+            b.setMinimumWidth(10)
+            b.clicked.connect(fn)
+            db2.addWidget(b)
+        dl.addLayout(db2)
+        return dbox
+
     def build_standings_tab(self, tabs):
+        from .pointsui import Flow, ModeCard, StepCard
         ov, s = self.ov, self.ov.s
         st = QWidget()
         v = QVBoxLayout(st)
-        intro = QLabel("<b>Cup Score shows who is winning.</b> Pick where the points come from, then add the window "
-                       "<i>" + STANDINGS_NAME + "</i> to OBS as a source. The board appears after the results board "
-                       "and stays until the next race.<br>"
-                       "&bull; <b>Counted by this program:</b> nothing to type. 1st gets as many points as there are "
-                       "players, the last one gets 1.<br>"
-                       "&bull; <b>A spreadsheet:</b> you keep the scores in your Google Sheet and the board follows it "
-                       "by itself (steps below).")
-        intro.setWordWrap(True)
-        v.addWidget(intro)
+        v.setSpacing(10)
+        v.addWidget(Flow((("flag", "Race ends"), ("count", "Points added"), ("screen", "Shown on stream"))))
 
-        box = QGroupBox("Where do the standings come from?")
-        bl = QVBoxLayout(box)
-        self.cmb_smode = QComboBox()
-        self.cmb_smode.addItem("Counted by this program (nothing to set up)", "local")
-        self.cmb_smode.addItem("My Google Sheet (link or file)", "sheet")
-        self.cmb_smode.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        self.cmb_smode.setMinimumContentsLength(10)
+        # where do the points come from? (the card buttons fill this hidden list)
+        self.cmb_smode = QComboBox(st)
+        self.cmb_smode.addItem("This program counts", "local")
+        self.cmb_smode.addItem("My Google Sheet", "sheet")
         self.cmb_smode.setCurrentIndex(1 if s.get("standings_mode") == "sheet" else 0)
         self.cmb_smode.currentIndexChanged.connect(
             lambda _i: (ov.set_setting("standings_mode", self.cmb_smode.currentData()), ov.standings.refresh(True)))
-        bl.addWidget(self.cmb_smode)
+        self.cmb_smode.hide()
+        cards = QHBoxLayout()
+        self.card_local = ModeCard("count", "This program counts", "Nothing to set up")
+        self.card_sheet = ModeCard("sheet", "My Google Sheet", "The board follows your sheet")
+        for i, card in enumerate((self.card_local, self.card_sheet)):
+            card.clicked.connect(lambda _c=False, i=i: self.cmb_smode.setCurrentIndex(i))
+            cards.addWidget(card)
+        v.addLayout(cards)
+
+        # --- counted by this program
+        sbox = QWidget()
+        sl = QVBoxLayout(sbox)
+        sl.setContentsMargins(0, 0, 0, 0)
+        self.lbl_book = QLabel()
+        self.lbl_book.setStyleSheet("font-size:16px;font-weight:700;")
+        self.lbl_book.setToolTip("Players are matched by trainer name. Replays, previews and old race files never give points, "
+                                 "and the same race is never counted twice. 1st place gets as many points as there are players, the last gets 1.")
+        sl.addWidget(self.lbl_book)
+        r2 = QHBoxLayout()
+        b_undo = QPushButton("Undo last race")
+        b_undo.clicked.connect(self.undo_race)
+        b_clr = QPushButton("New bracket")
+        b_clr.clicked.connect(self.clear_scores)
+        b_clr.setToolTip("Delete all counted points and start again")
+        for b in (b_undo, b_clr):
+            b.setMinimumWidth(10)
+            r2.addWidget(b)
+        sl.addLayout(r2)
+        share = Collapsible("Save or share the races")
+        r3 = QHBoxLayout()
+        b_exp = QPushButton("Save as .csv...")
+        b_exp.clicked.connect(self.export_scores)
+        b_sv = QPushButton("Save the races as a file...")
+        b_sv.setToolTip("All races counted here, in one file. Send it to a friend who counts the other rounds.")
+        b_sv.clicked.connect(self.save_races_file)
+        b_ld = QPushButton("Add races from a file...")
+        b_ld.setToolTip("Adds the races of a file a friend saved. A race you both counted is only counted once.")
+        b_ld.clicked.connect(self.load_races_file)
+        for b in (b_exp, b_sv, b_ld):
+            b.setMinimumWidth(10)
+            r3.addWidget(b)
+        share.body_l.addLayout(r3)
+        sl.addWidget(share)
+        v.addWidget(sbox)
+
+        # --- from my Google Sheet
         sheetw = QWidget()
         bl2 = QVBoxLayout(sheetw)
         bl2.setContentsMargins(0, 0, 0, 0)
-        bl.addWidget(sheetw)
-        steps = QLabel("<b>1.</b> In Google Sheets press <b>Share</b>, set General access to <i>Anyone with the link</i> "
-                       "and the role to <i>Viewer</i>.<br>"
-                       "<b>2.</b> Open the tab with the scores and copy the link from the address bar.<br>"
-                       "<b>3.</b> Paste it here and press <b>Connect</b>. Then just keep filling in your sheet: the "
-                       "board follows it about once a minute.")
-        steps.setWordWrap(True)
-        bl2.addWidget(steps)
-        bl2.addWidget(QLabel("Your Google Sheet link (or a file):"))
+        bl2.setSpacing(8)
+        steps = QHBoxLayout()
+        for n, kind, title, sub in ((1, "share", "Share the sheet", "Anyone with the link can view"),
+                                    (2, "link", "Copy the link", "from the address bar"),
+                                    (3, "paste", "Paste it below", "then press Connect")):
+            steps.addWidget(StepCard(n, kind, title, sub))
+        bl2.addLayout(steps)
         row = QHBoxLayout()
         self.ed_sheet = QLineEdit(s.get("standings_sheet", ""))
         self.ed_sheet.setPlaceholderText("Google Sheets link or file path")
@@ -1032,10 +1105,9 @@ class SettingsDialog(QDialog):
         bf.clicked.connect(self.choose_sheet_file)
         row.addWidget(bf)
         bl2.addLayout(row)
-        note = QLabel("The program only reads your sheet, it never changes it. The link of the tab you want "
-                      "(with <i>gid=</i>) picks that tab.")
-        note.setWordWrap(True)
-        bl2.addWidget(note)
+        self.lbl_sheet = QLabel("")
+        self.lbl_sheet.setWordWrap(True)
+        bl2.addWidget(self.lbl_sheet)
         cols = Collapsible("Columns (only if the automatic way fails)")
         f = cols.form()
         self.ed_tab = QLineEdit(s.get("standings_tab", ""))
@@ -1058,49 +1130,8 @@ class SettingsDialog(QDialog):
         self.sp_first.valueChanged.connect(lambda _v: self.apply_sheet())
         f.addRow("First row with a player", self.sp_first)
         bl2.addWidget(cols)
-        brow = QHBoxLayout()
-        btest = QPushButton("Read the sheet now")
-        btest.clicked.connect(self.apply_sheet)
-        brow.addWidget(btest)
-        brow.addStretch(1)
-        bl2.addLayout(brow)
-        self.lbl_sheet = QLabel("")
-        self.lbl_sheet.setWordWrap(True)
-        bl2.addWidget(self.lbl_sheet)
-        v.addWidget(box)
-
-        cb1 = QCheckBox("Give points after every race (PTS column on the results board)")
-        cb1.setChecked(bool(s.get("scoring", True)))
-        cb1.toggled.connect(lambda on: ov.set_setting("scoring", on))
-        v.addWidget(cb1)
-        cb2 = QCheckBox("Show the standings board after the results board (stays until the next race)")
-        cb2.setChecked(bool(s.get("standings_board", True)))
-        cb2.toggled.connect(lambda on: ov.set_setting("standings_board", on))
-        v.addWidget(cb2)
-        erow = QHBoxLayout()
-        erow.addWidget(QLabel("Show it after every"))
-        sp_every = QSpinBox()
-        sp_every.setRange(0, 99)
-        sp_every.setSpecialValueText("never (only by hand)")
-        sp_every.setSuffix(" race(s)")
-        sp_every.setValue(int(s.get("standings_every", 1)))
-        sp_every.valueChanged.connect(lambda x: (ov.set_setting("standings_every", int(x)),
-                                                 ov.cfg.__setitem__("races_since_standings", 0)))
-        erow.addWidget(sp_every)
-        erow.addStretch(1)
-        v.addLayout(erow)
-        bnow = QPushButton("Show / hide the standings now")
-        bnow.clicked.connect(lambda: ov.show_standings_now())
-        v.addWidget(bnow)
-
-
-        rbox = QGroupBox("Rounds (sheet)")
-        rl = QVBoxLayout(rbox)
-        rn = QLabel("Show one round or add rounds up, all from the same sheet tab. Single rounds read the "
-                    "round tables, added-up rounds read the <i>Final Rankings</i> table. You can also switch "
-                    "while streaming: right click the standings board or use the tray menu, <i>Standings view</i>.")
-        rn.setWordWrap(True)
-        rl.addWidget(rn)
+        rbox = Collapsible("Rounds (when your sheet has several)")
+        rl = rbox.body_l
         rf = QFormLayout()
         self.cmb_view = QComboBox()
         for key, text in VIEWS:
@@ -1121,7 +1152,76 @@ class SettingsDialog(QDialog):
         self.ed_total.editingFinished.connect(self.apply_rounds)
         rf.addRow("Final Rankings (player, 1, 2, 3)", self.ed_total)
         rl.addLayout(rf)
-        v.addWidget(rbox)
+        bl2.addWidget(rbox)
+        wbox = Collapsible("Write the placings into my sheet (needs a small script)")
+        wl = wbox.body_l
+        wi = QLabel("After a race each player's placing is written into your sheet. Press <b>Copy the script</b> and follow the GUIDE.")
+        wi.setWordWrap(True)
+        wl.addWidget(wi)
+        wf = QFormLayout()
+        self.ed_wurl = QLineEdit(str(s.get("sheet_write_url", "")))
+        self.ed_wurl.setPlaceholderText("https://script.google.com/macros/s/.../exec")
+        self.ed_wurl.editingFinished.connect(lambda: ov.set_setting("sheet_write_url", self.ed_wurl.text().strip()))
+        wf.addRow("Web app link", self.ed_wurl)
+        self.ed_wsec = QLineEdit(str(s.get("sheet_write_secret", "")))
+        self.ed_wsec.setPlaceholderText("the same secret code as in the script")
+        self.ed_wsec.editingFinished.connect(lambda: ov.set_setting("sheet_write_secret", self.ed_wsec.text().strip()))
+        wf.addRow("Secret code", self.ed_wsec)
+        self.cmb_wround = QComboBox()
+        for k in (1, 2, 3):
+            self.cmb_wround.addItem("Round %d  (tab Group Stage Round %d)" % (k, k), k)
+        self.cmb_wround.setCurrentIndex(max(0, min(2, int(s.get("sheet_write_round", 1)) - 1)))
+        self.cmb_wround.currentIndexChanged.connect(lambda _i: ov.set_setting("sheet_write_round", self.cmb_wround.currentData()))
+        wf.addRow("Round", self.cmb_wround)
+        self.cb_wauto = QCheckBox("Send every finished race by itself")
+        self.cb_wauto.setChecked(bool(s.get("sheet_write_auto", False)))
+        self.cb_wauto.setToolTip("Only races that really happen are sent (not previews or old files). A placing that is already "
+                                 "in the sheet is never overwritten.")
+        self.cb_wauto.toggled.connect(lambda on: ov.set_setting("sheet_write_auto", on))
+        wf.addRow("", self.cb_wauto)
+        wl.addLayout(wf)
+        wb = QHBoxLayout()
+        for text, fn in (("Copy the script", self.copy_sheet_script), ("Test the link", self.test_sheet_link),
+                         ("Send the last race now", self.send_sheet_now)):
+            b = QPushButton(text)
+            b.setMinimumWidth(10)
+            b.clicked.connect(fn)
+            wb.addWidget(b)
+        wl.addLayout(wb)
+        self.lbl_wstat = QLabel(ov.sheet_status or "Nothing sent yet.")
+        self.lbl_wstat.setWordWrap(True)
+        wl.addWidget(self.lbl_wstat)
+        bl2.addWidget(wbox)
+        v.addWidget(sheetw)
+
+        # --- what is shown on stream
+        obox = QGroupBox("On stream")
+        ol = QVBoxLayout(obox)
+        cb1 = QCheckBox("Points on the results board")
+        cb1.setChecked(bool(s.get("scoring", True)))
+        cb1.toggled.connect(lambda on: ov.set_setting("scoring", on))
+        ol.addWidget(cb1)
+        cb2 = QCheckBox("Show the standings board after the results")
+        cb2.setChecked(bool(s.get("standings_board", True)))
+        cb2.toggled.connect(lambda on: ov.set_setting("standings_board", on))
+        ol.addWidget(cb2)
+        erow = QHBoxLayout()
+        erow.addWidget(QLabel("Show it after every"))
+        sp_every = QSpinBox()
+        sp_every.setRange(0, 99)
+        sp_every.setSpecialValueText("never (only by hand)")
+        sp_every.setSuffix(" race(s)")
+        sp_every.setValue(int(s.get("standings_every", 1)))
+        sp_every.valueChanged.connect(lambda x: (ov.set_setting("standings_every", int(x)),
+                                                 ov.cfg.__setitem__("races_since_standings", 0)))
+        erow.addWidget(sp_every)
+        erow.addStretch(1)
+        ol.addLayout(erow)
+        bnow = QPushButton("Show / hide the standings now")
+        bnow.setToolTip("Add the window named " + STANDINGS_NAME + " to OBS as a source.")
+        bnow.clicked.connect(lambda: ov.show_standings_now())
+        ol.addWidget(bnow)
+        v.addWidget(obox)
 
         lbox = Collapsible("Look of the board: title, borders, avatars, pages")
         lf = lbox.form()
@@ -1171,131 +1271,21 @@ class SettingsDialog(QDialog):
         sp_page.valueChanged.connect(lambda x: ov.set_setting("standings_page_seconds", float(x)))
         lf.addRow("Next page after", sp_page)
         v.addWidget(lbox)
-
-        sbox = QGroupBox("Points counted by this program")
-        sl = QVBoxLayout(sbox)
-        self.lbl_book = QLabel()
-        sl.addWidget(self.lbl_book)
-        r2 = QHBoxLayout()
-        b_undo = QPushButton("Undo last race")
-        b_undo.clicked.connect(self.undo_race)
-        b_exp = QPushButton("Save as .csv...")
-        b_exp.clicked.connect(self.export_scores)
-        b_clr = QPushButton("New bracket")
-        b_clr.clicked.connect(self.clear_scores)
-        b_clr.setToolTip("Delete all counted points and start again")
-        for b in (b_undo, b_exp, b_clr):
-            b.setMinimumWidth(10)
-            r2.addWidget(b)
-        sl.addLayout(r2)
-        r3 = QHBoxLayout()
-        b_sv = QPushButton("Save the races as a file...")
-        b_sv.setToolTip("All races counted here, in one file. Send it to a friend who counts the other rounds.")
-        b_sv.clicked.connect(self.save_races_file)
-        b_ld = QPushButton("Add races from a file...")
-        b_ld.setToolTip("Adds the races of a file a friend saved. A race you both counted is only counted once.")
-        b_ld.clicked.connect(self.load_races_file)
-        for b in (b_sv, b_ld):
-            b.setMinimumWidth(10)
-            r3.addWidget(b)
-        sl.addLayout(r3)
-        pn = QLabel("<i>Players are matched by trainer name. Replays, previews and old race files "
-                    "never give points, and the same race is never counted twice.</i>")
-        pn.setWordWrap(True)
-        sl.addWidget(pn)
-        v.addWidget(sbox)
-
-        wbox = QGroupBox("Send placings to the Google Sheet (you own the sheet)")
-        wl = QVBoxLayout(wbox)
-        wi = QLabel("After a race the program writes each player's placing into the <i>Placing</i> column of the "
-                    "<i>Group Stage Round</i> tab, and your own formulas do the points. This needs a small script in your sheet: "
-                    "press <b>Copy the script</b>, then follow the steps in the GUIDE (Extensions &gt; Apps Script, paste, "
-                    "change the secret code, Deploy &gt; Web app, access: Anyone).")
-        wi.setWordWrap(True)
-        wl.addWidget(wi)
-        wf = QFormLayout()
-        self.ed_wurl = QLineEdit(str(s.get("sheet_write_url", "")))
-        self.ed_wurl.setPlaceholderText("https://script.google.com/macros/s/.../exec")
-        self.ed_wurl.editingFinished.connect(lambda: ov.set_setting("sheet_write_url", self.ed_wurl.text().strip()))
-        wf.addRow("Web app link", self.ed_wurl)
-        self.ed_wsec = QLineEdit(str(s.get("sheet_write_secret", "")))
-        self.ed_wsec.setPlaceholderText("the same secret code as in the script")
-        self.ed_wsec.editingFinished.connect(lambda: ov.set_setting("sheet_write_secret", self.ed_wsec.text().strip()))
-        wf.addRow("Secret code", self.ed_wsec)
-        self.cmb_wround = QComboBox()
-        for k in (1, 2, 3):
-            self.cmb_wround.addItem("Round %d  (tab Group Stage Round %d)" % (k, k), k)
-        self.cmb_wround.setCurrentIndex(max(0, min(2, int(s.get("sheet_write_round", 1)) - 1)))
-        self.cmb_wround.currentIndexChanged.connect(lambda _i: ov.set_setting("sheet_write_round", self.cmb_wround.currentData()))
-        wf.addRow("Round", self.cmb_wround)
-        self.cb_wauto = QCheckBox("Send every finished race by itself")
-        self.cb_wauto.setChecked(bool(s.get("sheet_write_auto", False)))
-        self.cb_wauto.setToolTip("Only races that really happen are sent (not previews or old files). A placing that is already "
-                                 "in the sheet is never overwritten.")
-        self.cb_wauto.toggled.connect(lambda on: ov.set_setting("sheet_write_auto", on))
-        wf.addRow("", self.cb_wauto)
-        wl.addLayout(wf)
-        wb = QHBoxLayout()
-        for text, fn in (("Copy the script", self.copy_sheet_script), ("Test the link", self.test_sheet_link),
-                         ("Send the last race now", self.send_sheet_now)):
-            b = QPushButton(text)
-            b.setMinimumWidth(10)
-            b.clicked.connect(fn)
-            wb.addWidget(b)
-        wl.addLayout(wb)
-        self.lbl_wstat = QLabel(ov.sheet_status or "Nothing sent yet.")
-        self.lbl_wstat.setWordWrap(True)
-        wl.addWidget(self.lbl_wstat)
-        v.addWidget(wbox)
-
-        dbox = QGroupBox("Skills spreadsheet (who has which skills)")
-        dl = QVBoxLayout(dbox)
-        di = QLabel("Put in your own race files (horseACT .json) and get a spreadsheet with the skills every uma <b>brought</b> "
-                    "(with the level), and how many umas brought each skill.")
-        di.setWordWrap(True)
-        dl.addWidget(di)
-        db = QHBoxLayout()
-        for text, fn in (("Choose race files...", self.skills_from_files), ("Choose a folder...", self.skills_from_folder)):
-            b = QPushButton(text)
-            b.setObjectName("primary")
-            b.setMinimumWidth(10)
-            b.clicked.connect(fn)
-            db.addWidget(b)
-        dl.addLayout(db)
-        dn = QLabel("<i>The sheets: <b>Who has what</b> (one row per uma), <b>Skill counts</b> (for example A Kiss for Courage: 2, "
-                    "and who) and <b>All skills</b> (one row per skill, to filter). The skill names come from Race Overlay's "
-                    "umdb.json. A race saved twice counts once.</i>")
-        dn.setWordWrap(True)
-        dl.addWidget(dn)
-        self.cb_rdata = QCheckBox("Also keep the races I play live (for the button below)")
-        self.cb_rdata.setChecked(bool(s.get("race_data", True)))
-        self.cb_rdata.setToolTip("Only races that really happen are kept (not previews or old files). Everything stays on this computer.")
-        self.cb_rdata.toggled.connect(lambda on: ov.set_setting("race_data", on))
-        dl.addWidget(self.cb_rdata)
-        self.lbl_rdata = QLabel()
-        self.lbl_rdata.setWordWrap(True)
-        dl.addWidget(self.lbl_rdata)
-        db2 = QHBoxLayout()
-        for text, fn in (("Spreadsheet of my live races...", self.skills_from_live), ("Delete the kept live races", self.clear_race_data)):
-            b = QPushButton(text)
-            b.setMinimumWidth(10)
-            b.clicked.connect(fn)
-            db2.addWidget(b)
-        dl.addLayout(db2)
         v.addStretch(1)
 
         def sync_smode(*_a):
             sheet = self.cmb_smode.currentData() == "sheet"
             sheetw.setVisible(sheet)
-            rbox.setVisible(sheet)
             sbox.setVisible(not sheet)
+            self.card_sheet.setChecked(sheet)
+            self.card_local.setChecked(not sheet)
         self.cmb_smode.currentIndexChanged.connect(sync_smode)
         sync_smode()
         sc = self.scrolled(st)
         self._stand_tab = sc
         self.update_book_label()
-        tabs.addTab(sc, "Cup Score")
-        self._data_layout.insertWidget(0, dbox)      # in the Data tab, at the top
+        tabs.addTab(sc, "Points")
+        self._data_layout.insertWidget(0, self.build_skills_box())      # in the Data tab, at the top
         self.update_race_data_label()
 
     # ---- draft tab (team match)
@@ -1567,8 +1557,10 @@ class SettingsDialog(QDialog):
 
     def update_book_label(self):
         b = self.ov.book
-        self.lbl_book.setText("%d race%s scored, %d players." % (len(b.races), "" if len(b.races) == 1 else "s",
-                                                               len(b.totals())))
+        if not b.races:
+            self.lbl_book.setText("No race counted yet")
+        else:
+            self.lbl_book.setText("%d race%s counted  \u00b7  %d players" % (len(b.races), "" if len(b.races) == 1 else "s", len(b.totals())))
 
     def undo_race(self):
         self.ov.book.undo_last()

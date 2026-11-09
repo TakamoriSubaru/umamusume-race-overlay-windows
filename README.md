@@ -104,7 +104,7 @@ The first time you start the program, a guide asks which version you want and th
 | --- | --- |
 | **Tower** | Only the race tower. Only the Home, Look and People tabs (and Help). A small menu. |
 | **Advanced** | The tower, the results board and the skill luck board. No points. |
-| **Tournament** | Everything: results, luck and standings boards, points (also from your Google Sheet), Cup Score, the team match (draft) and the Data tab. |
+| **Tournament** | Everything: results, luck and standings boards, points (also from your Google Sheet), Points, the team match (draft) and the Data tab. |
 
 ---
 
@@ -153,11 +153,11 @@ In the **Standings** tab you choose where the numbers come from:
 - **Counted by this program:** every race you play with it is scored and saved (`scores.json` in the settings folder). *Undo last race*, *Save as .csv* and *New bracket* are there too. Preview races, replays and old race files never give points, and the same race is never counted twice. Players are matched by trainer name.
 - **A spreadsheet:** paste a Google Sheets link (Share -> *Anyone with the link* -> Viewer; the link of the tab you want picks that tab) or choose a `.csv` / `.xlsx` file. Set the columns (player, points, optional uma) and the first row. It is reloaded every minute and only read, never changed.
 
-**Rounds:** in the Cup Score tab (Rounds section) choose *Round 1*, *Round 2*, *Round 3*, *After Round 2* (rounds 1 + 2) or *Overall Total* (all three). Everything is read from the same sheet tab. The tables are found **automatically by their headers** (*Trainer / Uma / Score* for each round, *Member / Round 1 / Round 2 / Round 3* for the final table), so it also works when Google leaves hidden columns out of the download. You can type the columns by hand instead (for example `B,C,D; G,H,I; L,M,N` and `Q,R,S,T`). While streaming, switch with a right click on the standings board or in the tray menu (*Standings view*). Players with 0 points are not shown (can be turned off).
+**Rounds:** in the Points tab (Rounds section) choose *Round 1*, *Round 2*, *Round 3*, *After Round 2* (rounds 1 + 2) or *Overall Total* (all three). Everything is read from the same sheet tab. The tables are found **automatically by their headers** (*Trainer / Uma / Score* for each round, *Member / Round 1 / Round 2 / Round 3* for the final table), so it also works when Google leaves hidden columns out of the download. You can type the columns by hand instead (for example `B,C,D; G,H,I; L,M,N` and `Q,R,S,T`). While streaming, switch with a right click on the standings board or in the tray menu (*Standings view*). Players with 0 points are not shown (can be turned off).
 
 **Borders:** in a single round, players with **9 points get a gold border, 8 silver and 7 bronze** (the three numbers can be changed). When rounds are added up, the **best N players** (default 10, changeable) get a gold border.
 
-**Look and timing:** every player gets an **avatar** (the picture from the People tab (Players), else the first letter). *Shape* switches between **portrait** (one column) and **landscape** (two columns). *Show it after every N races* (for example 5) decides when the standings come in by themselves; *never* means only when you press *Show / hide the standings now* (Cup Score tab or tray menu).
+**Look and timing:** every player gets an **avatar** (the picture from the People tab (Players), else the first letter). *Shape* switches between **portrait** (one column) and **landscape** (two columns). *Show it after every N races* (for example 5) decides when the standings come in by themselves; *never* means only when you press *Show / hide the standings now* (Points tab or tray menu).
 
 Use *Show standings board (to place it)* in the Menu to put the window where you want it on the stream.
 
