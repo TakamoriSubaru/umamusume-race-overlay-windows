@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.2
+
+- **Points tab, easier sheet setup:** the column and round settings are folded into one "Sheet layout" box (the program finds them by itself). "Fill my sheet with the placings" now has four picture steps, and the secret code is made for you and put inside the copied script, so you do not type it.
+
 ## 2.5.1
 
 - Cleaner Look and Help tabs. Fonts are folded away, and Help now says "Everything looks fine" or how many things to look at. The log is folded, and "Copy for support" stays in view.

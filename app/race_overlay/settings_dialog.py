@@ -1148,7 +1148,6 @@ class SettingsDialog(QDialog):
         self.sp_first.setValue(int(s.get("standings_first_row", 4)))
         self.sp_first.valueChanged.connect(lambda _v: self.apply_sheet())
         f.addRow("First row with a player", self.sp_first)
-        bl2.addWidget(cols)
         rbox = Collapsible("Rounds (when your sheet has several)")
         rl = rbox.body_l
         rf = QFormLayout()
@@ -1171,21 +1170,34 @@ class SettingsDialog(QDialog):
         self.ed_total.editingFinished.connect(self.apply_rounds)
         rf.addRow("Final Rankings (player, 1, 2, 3)", self.ed_total)
         rl.addLayout(rf)
-        bl2.addWidget(rbox)
-        wbox = Collapsible("Write the placings into my sheet (needs a small script)")
+        lay_fold = Collapsible("Sheet layout (only if the board looks wrong)")
+        lay_hint = QLabel("The program finds the columns and rounds by itself. Change these only when the board is wrong.")
+        lay_hint.setWordWrap(True)
+        lay_hint.setStyleSheet("color:%s;" % THEME["sub"])
+        lay_fold.body_l.addWidget(lay_hint)
+        lay_fold.body_l.addWidget(cols)
+        lay_fold.body_l.addWidget(rbox)
+        bl2.addWidget(lay_fold)
+        wbox = Collapsible("Fill my sheet with the placings (optional)")
         wl = wbox.body_l
-        wi = QLabel("After a race each player's placing is written into your sheet. Press <b>Copy the script</b> and follow the GUIDE.")
-        wi.setWordWrap(True)
-        wl.addWidget(wi)
+        wg = QGridLayout()
+        wg.setSpacing(8)
+        for i, (n, kind, title, sub) in enumerate((
+                (1, "paste", "Copy the script", "press the button below"),
+                (2, "sheet", "Paste it in your sheet", "Extensions > Apps Script > Save"),
+                (3, "share", "Deploy as Web app", "Who has access: Anyone"),
+                (4, "link", "Paste the link here", "then press Test the link"))):
+            wg.addWidget(StepCard(n, kind, title, sub), i // 2, i % 2)
+        wl.addLayout(wg)
+        b_script = QPushButton("Copy the script")
+        b_script.setObjectName("primary")
+        b_script.clicked.connect(self.copy_sheet_script)
+        wl.addWidget(b_script)
         wf = QFormLayout()
         self.ed_wurl = QLineEdit(str(s.get("sheet_write_url", "")))
         self.ed_wurl.setPlaceholderText("https://script.google.com/macros/s/.../exec")
         self.ed_wurl.editingFinished.connect(lambda: ov.set_setting("sheet_write_url", self.ed_wurl.text().strip()))
         wf.addRow("Web app link", self.ed_wurl)
-        self.ed_wsec = QLineEdit(str(s.get("sheet_write_secret", "")))
-        self.ed_wsec.setPlaceholderText("the same secret code as in the script")
-        self.ed_wsec.editingFinished.connect(lambda: ov.set_setting("sheet_write_secret", self.ed_wsec.text().strip()))
-        wf.addRow("Secret code", self.ed_wsec)
         self.cmb_wround = QComboBox()
         for k in (1, 2, 3):
             self.cmb_wround.addItem("Round %d  (tab Group Stage Round %d)" % (k, k), k)
@@ -1200,8 +1212,7 @@ class SettingsDialog(QDialog):
         wf.addRow("", self.cb_wauto)
         wl.addLayout(wf)
         wb = QHBoxLayout()
-        for text, fn in (("Copy the script", self.copy_sheet_script), ("Test the link", self.test_sheet_link),
-                         ("Send the last race now", self.send_sheet_now)):
+        for text, fn in (("Test the link", self.test_sheet_link), ("Send the last race now", self.send_sheet_now)):
             b = QPushButton(text)
             b.setMinimumWidth(10)
             b.clicked.connect(fn)
@@ -1210,6 +1221,12 @@ class SettingsDialog(QDialog):
         self.lbl_wstat = QLabel(ov.sheet_status or "Nothing sent yet.")
         self.lbl_wstat.setWordWrap(True)
         wl.addWidget(self.lbl_wstat)
+        wsec = Collapsible("Secret code (made for you)")
+        self.ed_wsec = QLineEdit(str(s.get("sheet_write_secret", "")))
+        self.ed_wsec.setPlaceholderText("made when you press Copy the script")
+        self.ed_wsec.editingFinished.connect(lambda: ov.set_setting("sheet_write_secret", self.ed_wsec.text().strip()))
+        wsec.body_l.addWidget(self.ed_wsec)
+        wl.addWidget(wsec)
         bl2.addWidget(wbox)
         v.addWidget(sheetw)
 
@@ -1671,11 +1688,18 @@ class SettingsDialog(QDialog):
         self.lbl_wstat.setText(self.ov.sheet_status or "Nothing sent yet.")
 
     def copy_sheet_script(self):
+        import secrets
         from .sheetwrite import APPS_SCRIPT
-        QApplication.clipboard().setText(APPS_SCRIPT)
-        QMessageBox.information(self, "Script copied", "The script is copied. In your Google Sheet open Extensions > Apps Script, "
-                                "delete what is there, paste it (Ctrl+V), change CHANGE-ME to your own secret code and press Save. "
-                                "Then Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone).")
+        code = self.ed_wsec.text().strip()
+        if not code:                                   # make the secret for the person, no typing needed
+            code = secrets.token_hex(6)
+            self.ed_wsec.setText(code)
+            self.ov.set_setting("sheet_write_secret", code)
+        QApplication.clipboard().setText(APPS_SCRIPT.replace('var SECRET = "CHANGE-ME";', 'var SECRET = "%s";' % code))
+        QMessageBox.information(self, "Script copied", "The script is copied and your secret code is already inside.\n\n"
+                                "1. In your Google Sheet: Extensions > Apps Script. Delete what is there, paste (Ctrl+V), Save.\n"
+                                "2. Deploy > New deployment > Web app. Execute as: Me. Who has access: Anyone.\n"
+                                "3. Copy the Web app link and paste it in the Web app link box.")
 
     def test_sheet_link(self):
         from . import sheetwrite
