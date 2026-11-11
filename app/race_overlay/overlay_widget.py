@@ -48,6 +48,7 @@ from .luck import luck_table, pick, skill_ids
 from .luck_board import LuckBoard
 from .match import Match
 from .match_board import MatchBoard
+from .analysis import AnalysisWindow
 from .standings_board import StandingsBoard
 from .tray import make_tray_icon
 from .autoupdate import AutoUpdate
@@ -182,6 +183,8 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.match_note = ""
         self.match = Match()                    # team match (draft): teams, players, races (match.json)
         self.mboard = MatchBoard(self)
+        self.sim_extra = []                     # speed / stamina of the race (analysis board)
+        self.analysis = AnalysisWindow(self)
         self.skill_acts = {}                    # {horse index: [skill ids that activated]}
 
         self.timer = QTimer(self)
@@ -310,6 +313,8 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.board.dismiss()                 # the results of the last race go away
         self.standings.dismiss()
         self.luck.dismiss()
+        self.analysis.dismiss()
+        self.sim_extra = sim.get("extra") or []
         self.mboard.dismiss()
         self.skill_acts = sim.get("skills") or {}
         self.skill_log = sim.get("skill_log") or []
@@ -496,6 +501,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.standings.tick(now, dt)
         self.luck.tick(now, dt)
         self.mboard.tick(now, dt)
+        self.analysis.tick(now, dt)
         self.update()
 
     # ----- tower maths (port of renderTime) ------------------------------------
@@ -1165,6 +1171,7 @@ class OverlayWidget(FramelessMixin, QWidget):
                                     lambda: self.set_luck_pinned(not self.luck.pinned))
         self.act_match = m.addAction("Show match board (to place it)",
                                      lambda: self.set_match_pinned(not self.mboard.pinned))
+        self.act_analysis = m.addAction("Open the analysis board", self.toggle_analysis)
         m.addAction("Replay a saved race (test)...", self.test_replay)
         self.act_compact = m.addAction("Small corner tower (top 5 only)")
         self.act_compact.setCheckable(True)
@@ -1204,6 +1211,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.act_stand.setText("Hide standings board" if self.standings.pinned else "Show standings board (to place it)")
         self.act_luck.setText("Hide skill luck board" if self.luck.pinned else "Show skill luck board (to place it)")
         self.act_match.setText("Hide match board" if self.mboard.pinned else "Show match board (to place it)")
+        self.act_analysis.setText("Hide the analysis board" if self.analysis.isVisible() else "Open the analysis board")
         self.act_prev.setChecked(self.preview)
         self.act_compact.setChecked(self.compact())
         for mode, act in self.pic_actions.items():
@@ -1243,6 +1251,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             self.luck.remember()
         if self.mboard.isVisible() or self.mboard.entries:
             self.mboard.remember()
+        self.analysis.remember()
         save_config(self.cfg)
         try:
             self.source.stop()
@@ -1267,6 +1276,7 @@ class OverlayWidget(FramelessMixin, QWidget):
             self.luck.remember()
         if self.mboard.isVisible() or self.mboard.entries:
             self.mboard.remember()
+        self.analysis.remember()
         save_config(self.cfg)
         try:
             self.source.stop()
@@ -1282,6 +1292,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.standings.close()
         self.luck.close()
         self.mboard.close()
+        self.analysis.close()
         if self.s.get("stop_server", True):
             stop_started_server()
         self.close()
@@ -1414,9 +1425,9 @@ class OverlayWidget(FramelessMixin, QWidget):
     def apply_tray_level(self):
         """The tray menu only lists the boards that belong to the version."""
         lv = self.level()
-        hide = {"tower": ("act_board", "act_stand", "act_stand_now", "act_luck", "act_match"),
+        hide = {"tower": ("act_board", "act_stand", "act_stand_now", "act_luck", "act_match", "act_analysis"),
                 "advanced": ("act_stand", "act_stand_now", "act_match")}.get(lv, ())
-        for name in ("act_board", "act_stand", "act_stand_now", "act_luck", "act_match"):
+        for name in ("act_board", "act_stand", "act_stand_now", "act_luck", "act_match", "act_analysis"):
             act = getattr(self, name, None)
             if act is not None:
                 act.setVisible(name not in hide)
@@ -1569,7 +1580,13 @@ class OverlayWidget(FramelessMixin, QWidget):
         payload = {"runners": runners, "courseShape": {"distance": 1600}, "courseData": {"distance": 1600},
                    "courseInfo": {"trackName": "Preview", "surface": "Turf", "distType": "Mile", "distance": 1600,
                                   "direction": "Left", "ground": "Good", "weather": "Sunny", "season": "Spring"}}
-        return {"times": times, "frames": frames, "results": results}, payload, rmap, fins
+        extra, log = [], []
+        for k, t in enumerate(times):
+            extra.append([(int(speeds[i] * 100 + 60 * math.sin(t * 0.4 + i)), int(max(0, 1800 - (14 + (i % 4) * 2) * t - 3 * i)), 0, -1)
+                          for i in range(len(umas))])
+        for i in range(len(umas)):
+            log += [(i, 10071, 12.0 + 2.1 * i), (i, 10081, 38.0 + 1.3 * i)]
+        return {"times": times, "frames": frames, "results": results, "extra": extra, "skill_log": log}, payload, rmap, fins
 
     def set_preview(self, on):
         if not on:
@@ -1658,6 +1675,11 @@ class OverlayWidget(FramelessMixin, QWidget):
             if luck_entries and at is not None:
                 self.luck.present(luck_entries, luck_footer, at)
                 follow("luck", at, self.luck)
+        if self.s.get("analysis_board", False) and not self.args.hold:
+            at = slot("analysis")
+            if at is not None:
+                self.analysis.present(at)
+                follow("analysis", at, self.analysis)
         if match_on and self.s.get("match_board", True) and not self.args.hold:
             at = slot("match")
             if at is not None:
@@ -1761,6 +1783,23 @@ class OverlayWidget(FramelessMixin, QWidget):
 
     def set_luck_pinned(self, on):
         self.luck.set_pinned(on, self.sample_luck() if on and not self.luck.entries else None)
+        self.refresh_tray()
+
+    def sample_analysis(self):
+        """A made-up race for the analysis board, to see what it looks like before any race has been run."""
+        from .analysis import build_analysis
+        sim, payload, rmap, fins = self.build_preview_race()
+        horses = self.build_horses(payload, rmap)
+        order = sorted(range(len(horses)), key=lambda i: fins[i])
+        entries = [{"h": horses[i], "place": p, "time": fmt_time(fins[i]),
+                    "gap": "Winner" if p == 1 else "+%.3f" % (fins[i] - fins[order[0]])} for p, i in enumerate(order, 1)]
+        return build_analysis(self, horses=horses, sim=sim, entries=entries, rmap=rmap, info=payload["courseInfo"])
+
+    def toggle_analysis(self):
+        if self.analysis.isVisible():
+            self.analysis.hide()
+        else:
+            self.analysis.open_now()
         self.refresh_tray()
 
     def results_entries(self):

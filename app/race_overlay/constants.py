@@ -19,6 +19,7 @@ APP_NAME = "Umamusume Race Overlay (%s)" % PLATFORM
 STANDINGS_NAME = "Umamusume Standings (%s)" % PLATFORM     # window name of the standings board (pick it in OBS)
 MATCH_NAME = "Umamusume Match (%s)" % PLATFORM            # window name of the team match board (pick it in OBS)
 LUCK_NAME = "Umamusume Skill Luck (%s)" % PLATFORM        # window name of the skill luck board (pick it in OBS)
+ANALYSIS_NAME = "Umamusume Analysis (%s)" % PLATFORM       # window name of the analysis board (pick it in OBS)
 RESULTS_NAME = "Umamusume Race Results (%s)" % PLATFORM   # window name of the results board (pick it in OBS)
 
 
@@ -184,6 +185,13 @@ DEFAULT_SETTINGS = {
     "race_overlay_start": "server",   # Windows: "server" (only server.exe), "app" (the whole program) or "both"
     "results_delay": 0.0,             # extra seconds before the results board comes in
     "luck_when": "after",             # "after" = once the board before it has gone, "with" = together with the results board
+    "analysis_board": False,          # open the analysis board after the results
+    "analysis_seconds": 30.0,         # how long it stays open (0 = until the next race)
+    "analysis_auto": True,            # it changes page by itself
+    "analysis_page_seconds": 8.0,
+    "analysis_page": "table",
+    "analysis_when": "after",
+    "analysis_delay": 0.0,
     "luck_delay": 0.0,                # extra seconds for the luck board
     "match_when": "after",
     "match_delay": 0.0,
@@ -227,7 +235,7 @@ KEEP_ON_RESET = ("simple_mode", "level", "saved_races_dir", "auto_hide",
                  "standings_title", "standings_rows", "standings_page_seconds", "standings_refresh", "quick_start_open", "luck_board",
                  "luck_seconds", "match_mode", "match_board", "match_seconds", "match_title", "match_show_races", "match_show_picks",
                  "start_race_overlay", "race_overlay_dir", "race_overlay_start",
-                 "results_delay", "luck_when", "luck_delay", "match_when", "match_delay", "standings_when", "standings_delay")
+                 "analysis_board", "analysis_seconds", "analysis_auto", "analysis_page_seconds", "results_delay", "luck_when", "luck_delay", "match_when", "match_delay", "standings_when", "standings_delay")
 
 
 # Colour sets for the Look tab. Each one only changes colours.

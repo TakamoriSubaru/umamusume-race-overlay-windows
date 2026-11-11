@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.6.0
+
+- **New: the analysis board** (a little like Hakuraku). After a race it shows a Table (top speed, stamina left, where an uma ran dry, time tempted or blocked, skills used / brought), line charts of Speed, Stamina, Gap to the leader and Lane, and a Skills timeline on the track. Click an uma to follow her on every page. It is a normal window you can click, and in OBS its own window; it can also change page by itself. Turn it on in the Data tab ("Open it after every race") or open it from the tray menu.
+
 ## 2.5.2
 
 - **Points tab, easier sheet setup:** the column and round settings are folded into one "Sheet layout" box (the program finds them by itself). "Fill my sheet with the placings" now has four picture steps, and the secret code is made for you and put inside the copied script, so you do not type it.

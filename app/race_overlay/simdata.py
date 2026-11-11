@@ -43,18 +43,23 @@ def parse_sim(b64):
 
     times = []
     frames = []  # frames[k] = list of (dist, lane) per horse
+    extra = []   # extra[k] = list of (speed*100, hp, temptation, blocked-by) per horse
     for _ in range(frame_count):
         if o + frame_size > n:
             break
         times.append(f32(o))
         hs = []
+        ex = []
         h = o + 4
         for _j in range(horse_num):
             if h + 12 > n:
                 break
             hs.append((f32(h), u16(h + 4)))
+            if horse_frame_size >= 12 and h + 12 <= n:
+                ex.append((u16(h + 6), u16(h + 8), buf[h + 10], struct.unpack_from("<b", buf, h + 11)[0]))
             h += horse_frame_size
         frames.append(hs)
+        extra.append(ex)
         o += frame_size
 
     results = []
@@ -79,7 +84,7 @@ def parse_sim(b64):
     except Exception:
         pass
 
-    return {"times": times, "frames": frames, "results": results, "horseNum": horse_num, "skills": skills, "skill_log": skill_log}
+    return {"times": times, "frames": frames, "extra": extra, "results": results, "horseNum": horse_num, "skills": skills, "skill_log": skill_log}
 
 
 def _skill_events(buf, o, horse_num, log=None):
