@@ -43,29 +43,23 @@ def parse_sim(b64):
 
     times = []
     frames = []  # frames[k] = list of (dist, lane) per horse
-    extra = []   # extra[k] = list of (speed*100, hp, temptation, blocked-by) per horse
     for _ in range(frame_count):
         if o + frame_size > n:
             break
         times.append(f32(o))
         hs = []
-        ex = []
         h = o + 4
         for _j in range(horse_num):
             if h + 12 > n:
                 break
             hs.append((f32(h), u16(h + 4)))
-            if horse_frame_size >= 12 and h + 12 <= n:
-                ex.append((u16(h + 6), u16(h + 8), buf[h + 10], struct.unpack_from("<b", buf, h + 11)[0]))
             h += horse_frame_size
         frames.append(hs)
-        extra.append(ex)
         o += frame_size
 
     results = []
     skills = {}          # {horse index: [skill id, ...]} every skill that really activated, in order
     skill_log = []       # [(horse index, skill id, race time)] every single activation
-    events = []          # [(race time, event type, [parameters])] every event (5 = duel started ...)
     try:
         pad2 = i32(o)
         if 0 <= pad2 < 65536:
@@ -78,21 +72,17 @@ def parse_sim(b64):
                     "finishOrder": i32(o),
                     "finishTime": f32(o + 4),
                     "finishDiffTime": f32(o + 8),
-                    "startDelay": f32(o + 12),           # seconds after the gate opened (more than 0.08 = a late start)
-                    "gutsRank": buf[o + 16],
-                    "witRank": buf[o + 17],
-                    "lastSpurtStart": f32(o + 18),       # metres where the last spurt began
                     "finishTimeRaw": f32(o + 27),
                 })
                 o += r_size
-            skills = _skill_events(buf, o, horse_num, skill_log, events)
+            skills = _skill_events(buf, o, horse_num, skill_log)
     except Exception:
         pass
 
-    return {"times": times, "frames": frames, "extra": extra, "results": results, "horseNum": horse_num, "skills": skills, "skill_log": skill_log, "events": events}
+    return {"times": times, "frames": frames, "results": results, "horseNum": horse_num, "skills": skills, "skill_log": skill_log}
 
 
-def _skill_events(buf, o, horse_num, log=None, events=None):
+def _skill_events(buf, o, horse_num, log=None):
     """The event list that follows the placings: size-prefixed events (time, type, parameters).
     Type 3 = a skill activated: parameter 0 is the horse index, parameter 1 the skill id.
     Any surprise (a different layout) just gives no skills, never an error."""
@@ -114,9 +104,6 @@ def _skill_events(buf, o, horse_num, log=None, events=None):
             if size < 6 or o + 2 + size > n:
                 break
             etype, pc = buf[o + 6], buf[o + 7]
-            if events is not None and 8 + 4 * pc <= 2 + size:
-                et = struct.unpack_from("<f", buf, o + 2)[0]
-                events.append((et, etype, [struct.unpack_from("<i", buf, o + 8 + 4 * q)[0] for q in range(min(pc, 8))]))
             if etype == 3 and pc >= 2 and 8 + 4 * pc <= 2 + size:
                 horse, skill = struct.unpack_from("<ii", buf, o + 8)
                 if 0 <= horse < horse_num and skill > 0:

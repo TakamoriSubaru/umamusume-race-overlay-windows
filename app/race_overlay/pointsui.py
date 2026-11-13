@@ -145,14 +145,6 @@ def paint_icon(p, kind, rect, color=None, accent=None):
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QBrush(accent))
         p.drawEllipse(P(33, 16), 3, 3)
-    elif kind == "chart":
-        p.setPen(_pen(color, 3))
-        p.drawLine(P(8, 8), P(8, 40))
-        p.drawLine(P(8, 40), P(42, 40))
-        p.setPen(_pen(accent, 3))
-        p.drawPolyline(QPolygonF([P(12, 32), P(21, 21), P(28, 27), P(40, 11)]))
-        p.setPen(_pen(color, 2))
-        p.drawPolyline(QPolygonF([P(12, 36), P(22, 30), P(30, 33), P(40, 24)]))
     elif kind == "arrow":
         p.setPen(_pen(color, 3))
         p.drawLine(P(8, 24), P(38, 24))

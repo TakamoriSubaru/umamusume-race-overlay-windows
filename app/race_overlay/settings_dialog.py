@@ -39,7 +39,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from .constants import (ANALYSIS_NAME, APP_NAME, APP_VERSION, FROZEN, IS_WINDOWS, LUCK_NAME, MATCH_NAME, PLATFORM, RELEASES_URL, RESULTS_NAME,
+from .constants import (APP_NAME, APP_VERSION, FROZEN, IS_WINDOWS, LUCK_NAME, MATCH_NAME, PLATFORM, RELEASES_URL, RESULTS_NAME,
                         SCRIPT_DIR, STANDINGS_NAME, STATE_COLORS, THEME_PRESETS)
 from . import logbuf
 from .diagnostics import LOG_FILES, read_tail, run_checks
@@ -999,54 +999,6 @@ class SettingsDialog(QDialog):
         return sa
 
     # ---- standings tab
-    def build_analysis_box(self):
-        """The analysis board box (shown in the Data tab)."""
-        ov, s = self.ov, self.ov.s
-        from .pointsui import Flow
-        box = QGroupBox("Analysis board")
-        l = QVBoxLayout(box)
-        l.addWidget(Flow((("flag", "Race ends"), ("chart", "Charts"), ("screen", "Your screen or stream"))))
-        info = QLabel("Speed, stamina, gaps and skills of every uma, like Hakuraku.")
-        info.setWordWrap(True)
-        info.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        info.setToolTip("Pages: Speed, Stamina, Gap, Skills. Click an uma to follow her on every page. "
-                        "In OBS it is its own window: " + ANALYSIS_NAME + ".")
-        l.addWidget(info)
-        b_open = QPushButton("Open the analysis board")
-        b_open.setObjectName("primary")
-        b_open.clicked.connect(lambda: ov.analysis.open_now())
-        l.addWidget(b_open)
-        cb = QCheckBox("Open it after every race")
-        cb.setChecked(bool(s.get("analysis_board", False)))
-        cb.toggled.connect(lambda on: ov.set_setting("analysis_board", on))
-        l.addWidget(cb)
-        cb2 = QCheckBox("Change page by itself")
-        cb2.setChecked(bool(s.get("analysis_auto", True)))
-        cb2.toggled.connect(lambda on: (ov.set_setting("analysis_auto", on), ov.analysis.set_auto(on)))
-        l.addWidget(cb2)
-        f = QFormLayout()
-        sp1 = QDoubleSpinBox()
-        sp1.setRange(0, 600)
-        sp1.setDecimals(0)
-        sp1.setSuffix(" seconds")
-        sp1.setSpecialValueText("until the next race")
-        sp1.setValue(float(s.get("analysis_seconds", 30.0)))
-        sp1.valueChanged.connect(lambda v: ov.set_setting("analysis_seconds", float(v)))
-        f.addRow("Stays open", sp1)
-        sp2 = QDoubleSpinBox()
-        sp2.setRange(2, 120)
-        sp2.setDecimals(0)
-        sp2.setSuffix(" seconds")
-        sp2.setValue(float(s.get("analysis_page_seconds", 8.0)))
-        sp2.valueChanged.connect(lambda v: ov.set_setting("analysis_page_seconds", float(v)))
-        f.addRow("Next page after", sp2)
-        l.addLayout(f)
-        b_copy = QPushButton("Copy the window name for OBS")
-        b_copy.setToolTip(ANALYSIS_NAME)
-        b_copy.clicked.connect(lambda: QApplication.clipboard().setText(ANALYSIS_NAME))
-        l.addWidget(b_copy)
-        return box
-
     def build_skills_box(self):
         """The skills spreadsheet box (shown in the Data tab)."""
         ov, s = self.ov, self.ov.s
@@ -1370,7 +1322,6 @@ class SettingsDialog(QDialog):
         self.update_book_label()
         tabs.addTab(sc, "Points")
         self._data_layout.insertWidget(0, self.build_skills_box())      # in the Data tab, at the top
-        self._data_layout.insertWidget(1, self.build_analysis_box())
         self.update_race_data_label()
 
     # ---- draft tab (team match)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.7.1
+
+- **Analysis board removed.** The app is back to how it was in 2.5.2 (the 2.6.0 and 2.7.0 analysis board and replay are gone).
+
 ## 2.7.0
 
 - **The analysis board looks like Hakuraku now.** It opens on a results table with the umas' pictures: finish, number, time and gap in metres, running style and mood, start delay (Normal or Late), last spurt, HP result (survived or ran dry), duel, rushed time and stats.
