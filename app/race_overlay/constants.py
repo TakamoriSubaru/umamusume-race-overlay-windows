@@ -22,7 +22,7 @@ LUCK_NAME = "Umamusume Skill Luck (%s)" % PLATFORM        # window name of the s
 RESULTS_NAME = "Umamusume Race Results (%s)" % PLATFORM   # window name of the results board (pick it in OBS)
 
 
-APP_VERSION = "2.7.0"
+APP_VERSION = "2.7.1"
 
 
 SLIDE_SECONDS = 0.45       # how long the tower takes to slide in / out
