@@ -184,6 +184,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.match = Match()                    # team match (draft): teams, players, races (match.json)
         self.mboard = MatchBoard(self)
         self.sim_extra = []                     # speed / stamina of the race (analysis board)
+        self.sim_events = []                    # race events (duel ...)
         self.analysis = AnalysisWindow(self)
         self.skill_acts = {}                    # {horse index: [skill ids that activated]}
 
@@ -315,6 +316,7 @@ class OverlayWidget(FramelessMixin, QWidget):
         self.luck.dismiss()
         self.analysis.dismiss()
         self.sim_extra = sim.get("extra") or []
+        self.sim_events = sim.get("events") or []
         self.mboard.dismiss()
         self.skill_acts = sim.get("skills") or {}
         self.skill_log = sim.get("skill_log") or []

@@ -1005,11 +1005,11 @@ class SettingsDialog(QDialog):
         from .pointsui import Flow
         box = QGroupBox("Analysis board")
         l = QVBoxLayout(box)
-        l.addWidget(Flow((("flag", "Race ends"), ("chart", "Charts and numbers"), ("screen", "Your screen or stream"))))
+        l.addWidget(Flow((("flag", "Race ends"), ("chart", "Charts"), ("screen", "Your screen or stream"))))
         info = QLabel("Speed, stamina, gaps and skills of every uma, like Hakuraku.")
         info.setWordWrap(True)
         info.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        info.setToolTip("Pages: Table, Speed, Stamina, Gap, Lane, Skills. Click an uma to follow her on every page. "
+        info.setToolTip("Pages: Speed, Stamina, Gap, Skills. Click an uma to follow her on every page. "
                         "In OBS it is its own window: " + ANALYSIS_NAME + ".")
         l.addWidget(info)
         b_open = QPushButton("Open the analysis board")
@@ -1022,7 +1022,7 @@ class SettingsDialog(QDialog):
         l.addWidget(cb)
         cb2 = QCheckBox("Change page by itself")
         cb2.setChecked(bool(s.get("analysis_auto", True)))
-        cb2.toggled.connect(lambda on: (ov.set_setting("analysis_auto", on), ov.analysis.cb_auto.setChecked(on)))
+        cb2.toggled.connect(lambda on: (ov.set_setting("analysis_auto", on), ov.analysis.set_auto(on)))
         l.addWidget(cb2)
         f = QFormLayout()
         sp1 = QDoubleSpinBox()

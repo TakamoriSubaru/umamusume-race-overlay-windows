@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.7.0
+
+- **The analysis board looks like Hakuraku now.** It opens on a results table with the umas' pictures: finish, number, time and gap in metres, running style and mood, start delay (Normal or Late), last spurt, HP result (survived or ran dry), duel, rushed time and stats.
+- **New: Replay.** The umas move along the track at 30 frames per second: distance left to right, lane position up. Skill names, "Rushed" and "Dueling" show above them, and a red mark shows when one is blocked. Click an uma to look only at her (with her speed and stamina), or use the buttons on top to show or hide umas. Play, pause, a slider, speed 0.25x to 4x and a view window (30 to 600 m).
+- **Skills hit and missed:** click an uma to see which skills hit (with the time and place) and which missed, with the reason. The game does not save the reason, so it is worked out from the race: condition not met (sure), probably the wit check (a guess) or can't tell.
+- **Clearer charts:** Speed and Stamina compare each uma to the field average. Stamina and Gap pages stay.
+
 ## 2.6.0
 
 - **New: the analysis board** (a little like Hakuraku). After a race it shows a Table (top speed, stamina left, where an uma ran dry, time tempted or blocked, skills used / brought), line charts of Speed, Stamina, Gap to the leader and Lane, and a Skills timeline on the track. Click an uma to follow her on every page. It is a normal window you can click, and in OBS its own window; it can also change page by itself. Turn it on in the Data tab ("Open it after every race") or open it from the tray menu.

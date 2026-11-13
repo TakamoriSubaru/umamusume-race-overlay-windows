@@ -8,12 +8,14 @@ import math
 import time
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
-from PyQt6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QHBoxLayout, QHeaderView, QLabel, QPushButton,
-                             QStackedWidget, QTableWidget, QTableWidgetItem, QToolTip, QVBoxLayout, QWidget)
+from PyQt6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen
+from PyQt6.QtWidgets import (QAbstractItemView, QButtonGroup, QHBoxLayout, QHeaderView, QLabel, QPushButton, QSplitter, QStackedWidget,
+                             QStyledItemDelegate, QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget)
 
 from .constants import ANALYSIS_NAME
+from . import skillcheck
 from .racedata import STYLE_NAMES, load_skills
+from .replay import ReplayPage
 from .theme import THEME, build_theme_qss
 
 PALETTE = ("#ff6fae", "#5de6c2", "#6cb8ff", "#ffd24a", "#b56cff", "#ff9a6f", "#9be564", "#ff6b6b", "#4dd0e1",
@@ -24,18 +26,21 @@ KINDS = {                   # page -> (title, x axis, y axis label, upside down?
     "speed": ("Speed", "dist", "m/s", False),
     "hp": ("Stamina left", "dist", "% of the start", False),
     "gap": ("Gap to the leader", "time", "metres behind", True),
-    "lane": ("Lane (relative, 0 = inside rail)", "dist", "", False),
 }
 
 _skill_cache = {}
 
 
-def skill_names(ov):
+def skill_records(ov):
     paths = ov.umdb_paths()
     key = tuple(paths)
     if key not in _skill_cache:
-        _skill_cache[key] = {k: (v.get("name") or "") for k, v in load_skills(paths).items()}
+        _skill_cache[key] = load_skills(paths)
     return _skill_cache[key]
+
+
+def skill_names(ov):
+    return {k: (v.get("name") or "") for k, v in skill_records(ov).items()}
 
 
 def nice_ticks(lo, hi, n=5):
@@ -63,6 +68,7 @@ def build_analysis(ov, horses=None, sim=None, entries=None, rmap=None, info=None
     extra = (sim or {}).get("extra") if sim else getattr(ov, "sim_extra", [])
     results = (sim or {}).get("results") if sim else ov.results
     log = (sim or {}).get("skill_log") if sim else ov.skill_log
+    events = (sim or {}).get("events") if sim else getattr(ov, "sim_events", [])
     rmap = ov.result_map if rmap is None else rmap
     info = (ov.course_info if info is None else info) or {}
     if not horses or not times or not frames:
@@ -82,7 +88,7 @@ def build_analysis(ov, horses=None, sim=None, entries=None, rmap=None, info=None
         j = h.frame_idx
         r = {"h": h, "j": j, "place": e["place"], "time": e["time"], "gap": e["gap"], "color": PALETTE[ci % len(PALETTE)],
              "name": h.label or h.name, "trainer": h.trainer, "style": STYLE_NAMES.get(h.style, "?"),
-             "brought": list(h.skills or []), "dist": [], "t": [], "speed": [], "hp": [], "lane": [], "tempt": [], "block": []}
+             "brought": list(h.skills or []), "dist": [], "t": [], "speed": [], "hp": [], "lane": [], "lane_raw": [], "tempt": [], "block": []}
         for k in range(nk):
             if j >= len(frames[k]):
                 continue
@@ -90,6 +96,7 @@ def build_analysis(ov, horses=None, sim=None, entries=None, rmap=None, info=None
             r["t"].append(float(times[k]))
             r["dist"].append(d)
             r["lane"].append(frames[k][j][1] / 1000.0)
+            r["lane_raw"].append(float(frames[k][j][1]))
             if have_extra and j < len(extra[k]):
                 sp, hp, tm, bl = extra[k][j]
                 r["speed"].append(sp / 100.0)
@@ -103,10 +110,15 @@ def build_analysis(ov, horses=None, sim=None, entries=None, rmap=None, info=None
         rp = rm.get("raceParam") or {}
         if rp.get("rawSpeed") is not None:
             stats = {"Spd": rp.get("rawSpeed"), "Sta": rp.get("rawStamina"), "Pow": rp.get("rawPow"),
-                     "Gut": rp.get("rawGuts"), "Wit": rp.get("rawWiz")}
+                     "Gut": rp.get("rawGuts"), "Wit": rp.get("rawWiz"), "WitBase": rp.get("baseWiz")}
         r["stats"] = stats
+        r["popularity"] = rm.get("popularity")
         res = results[j] if j < len(results) else None
         r["raw_time"] = float(res["finishTimeRaw"]) if res and res.get("finishTimeRaw", 0) > 0 else 0.0
+        r["start_delay"] = res.get("startDelay") if res else None
+        r["last_spurt_at"] = res.get("lastSpurtStart") if res else None
+        r["mood"] = rp.get("motivation") or ""
+        r["duel_at"] = next((e[0] for e in (events or []) if e[1] == 5 and e[2] and e[2][0] == j), None)
         runners.append(r)
 
     # numbers per uma
@@ -152,13 +164,41 @@ def build_analysis(ov, horses=None, sim=None, entries=None, rmap=None, info=None
         acts.append({"n": n, "id": int(skill), "name": names.get(int(skill)) or ("Skill %d" % int(skill)), "t": float(t), "dist": d})
     for n, r in enumerate(runners):
         r["acts"] = sorted((a for a in acts if a["n"] == n), key=lambda a: a["t"])
-    return {"runners": runners, "total": total, "acts": acts, "has_speed": have_extra,
-            "title": ov.course_lines(info)[0] if info else "Race", "info": info,
-            "max_t": max((r["t"][-1] for r in runners if r["t"]), default=1.0)}
+    # every uma on the same distances (every 10 m), and how far above or below the field average she was
+    grid = [float(g) for g in range(0, int(total) + 1, 10)]
+    if grid[-1] < total:
+        grid.append(total)
+    for key in ("speed", "hp"):
+        cols = []
+        for r in runners:
+            xs = r["dist"][:len(r[key])]
+            ys = r[key] if key == "speed" else [100.0 * v / (r.get("hp0") or 1.0) for v in r[key]]
+            cols.append([None if (not xs or g > xs[-1] + 1e-9) else skillcheck._lin(xs, ys, g) for g in grid])
+        means = []
+        for i in range(len(grid)):
+            vals = [c[i] for c in cols if c[i] is not None]
+            means.append(sum(vals) / len(vals) if len(vals) >= 2 else None)
+        for r, c in zip(runners, cols):
+            r[key + "_rel"] = [None if (v is None or means[i] is None) else v - means[i] for i, v in enumerate(c)]
+    out = {"runners": runners, "total": total, "acts": acts, "has_speed": have_extra, "grid": grid,
+           "times": [float(t) for t in times],
+           "title": ov.course_lines(info)[0] if info else "Race", "info": info,
+           "max_t": max((r["t"][-1] for r in runners if r["t"]), default=1.0)}
+    try:
+        skillcheck.analyse(out, skill_records(ov), info)
+    except Exception as e:                                 # the reasons are a bonus: never break the board
+        print("skill check:", e)
+        for r in runners:
+            r.setdefault("hit", []), r.setdefault("miss", [])
+            r.setdefault("wit_chance", None)
+    return out
 
 
-def series(data, kind, r):
-    """(xs, ys) of one uma for one chart."""
+def series(data, kind, r, compare=False):
+    """(xs, ys) of one uma for one chart. compare: how far above (+) or below (-) the field average she was."""
+    if compare and kind in ("speed", "hp"):
+        pts = [(g, v) for g, v in zip(data["grid"], r[kind + "_rel"]) if v is not None]
+        return [a for a, _b in pts], [b for _a, b in pts]
     if kind == "speed":
         return r["dist"][:len(r["speed"])], r["speed"]
     if kind == "hp":
@@ -169,18 +209,113 @@ def series(data, kind, r):
     return r["dist"], r["lane"]
 
 
+def uma_face(ov, p, r, rect):
+    """The round picture of the uma (her face), or her first letter while the picture is not there yet."""
+    h = r["h"]
+    try:
+        ov.draw_circle_picture(p, rect, ov.uma_pixmap(h), (h.name[:1] or "?"), QColor("#ffffff"))
+    except Exception:
+        p.setPen(QColor(THEME["text"]))
+        p.drawText(rect, Qt.AlignmentFlag.AlignCenter, h.name[:1] or "?")
+
+
+def fmt_value(kind, v, compare=False):
+    if v is None:
+        return ""
+    if compare and kind in ("speed", "hp"):
+        return {"speed": "%+.2f", "hp": "%+.0f%%"}[kind] % v
+    return {"speed": "%.1f m/s", "hp": "%.0f%%", "gap": "%.1f m"}[kind] % v
+
+
+class UmaList(QWidget):
+    """The umas with their pictures, finish order, at the left. Click = follow her, right-click = hide her.
+    While the mouse is over a chart the numbers show her value at that spot."""
+    W = 280
+
+    def __init__(self, win):
+        super().__init__()
+        self.win = win
+        self.setFixedWidth(self.W)
+        self.setMinimumHeight(300)
+
+    def geo(self):
+        n = max(1, len(self.win.data["runners"])) if self.win.data else 1
+        return min(62.0, max(34.0, (self.height() - 4) / float(n)))
+
+    def paintEvent(self, _e):
+        p = QPainter(self)
+        p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing | QPainter.RenderHint.SmoothPixmapTransform)
+        d, ov = self.win.data, self.win.ov
+        if not d:
+            return
+        rh = self.geo()
+        self.rows = []
+        for n, r in enumerate(d["runners"]):
+            rect = QRectF(0, n * rh, self.W, rh - 4)
+            self.rows.append((rect, n))
+            hidden, sel = n in self.win.hidden, n == self.win.hl
+            path = QPainterPath()
+            path.addRoundedRect(rect, 10, 10)
+            p.fillPath(path, QColor(255, 111, 174, 46) if sel else QColor(THEME["card"]))
+            if sel:
+                p.setPen(QPen(QColor(THEME["pink"]), 1.5))
+                p.drawPath(path)
+            p.setOpacity(0.35 if hidden else 1.0)
+            strip = QPainterPath()
+            strip.addRoundedRect(QRectF(rect.left() + 5, rect.top() + 8, 4, rect.height() - 16), 2, 2)
+            p.fillPath(strip, QColor(r["color"]))
+            pic = rect.height() - 12
+            uma_face(ov, p, r, QRectF(rect.left() + 16, rect.top() + 6, pic, pic))
+            tx = rect.left() + 16 + pic + 10
+            tw = rect.right() - tx - 78
+            p.setFont(ov.fnt(13, True))
+            p.setPen(QColor(THEME["text"]))
+            fm = QFontMetrics(p.font())
+            top = rect.top() + (6 if rh >= 44 else 2)
+            p.drawText(QRectF(tx, top, tw, rect.height() / 2.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                       fm.elidedText("%s. %s" % (r["place"], r["name"]), Qt.TextElideMode.ElideRight, int(tw)))
+            if rh >= 44:
+                p.setFont(ov.fnt(10))
+                p.setPen(QColor(THEME["sub"]))
+                p.drawText(QRectF(tx, rect.top() + rect.height() / 2.0 - 1, tw, rect.height() / 2.0 - 4),
+                           Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                           QFontMetrics(p.font()).elidedText(r["trainer"] or r["style"], Qt.TextElideMode.ElideRight, int(tw)))
+            hv = self.win.hover
+            p.setFont(ov.fnt(13, True, mono=True))
+            p.setPen(QColor(THEME["yellow"] if hv is not None else THEME["text"]))
+            text = fmt_value(self.win.page, hv.get(n), self.win.compare) if hv is not None else r["time"]
+            p.drawText(QRectF(rect.right() - 80, rect.top() + 2, 72, rect.height() / 2.0 + 6),
+                       Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, text)
+            if hv is None and rh >= 44:
+                p.setFont(ov.fnt(10, mono=True))
+                p.setPen(QColor(THEME["sub"]))
+                p.drawText(QRectF(rect.right() - 80, rect.top() + rect.height() / 2.0 + 2, 72, rect.height() / 2.0 - 6),
+                           Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, r["gap"])
+            p.setOpacity(1.0)
+
+    def mousePressEvent(self, ev):
+        self.win.stop_auto()
+        for rect, n in getattr(self, "rows", []):
+            if rect.contains(ev.position()):
+                if ev.button() == Qt.MouseButton.RightButton or ev.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    self.win.toggle_hidden(n)
+                else:
+                    self.win.set_hl(None if self.win.hl == n else n)
+                return
+
+
 class ChartView(QWidget):
-    """A line chart with the umas listed at the right (click = follow, Ctrl+click = hide)."""
+    """A line chart. Move the mouse over it: the list at the left shows every uma's number at that spot."""
 
     def __init__(self, win, kind):
         super().__init__()
         self.win, self.kind = win, kind
         self.setMouseTracking(True)
         self.hx = None
-        self.setMinimumSize(520, 300)
+        self.setMinimumSize(420, 300)
 
     def plot_rect(self):
-        return QRectF(64, 46, max(100, self.width() - LEG_W - 86), max(80, self.height() - 92))
+        return QRectF(56, 50, max(100, self.width() - 80), max(80, self.height() - 96))
 
     def ranges(self):
         d = self.win.data
@@ -190,24 +325,25 @@ class ChartView(QWidget):
         for n, r in enumerate(d["runners"]):
             if n in self.win.hidden:
                 continue
-            ys = series(d, self.kind, r)[1]
-            if self.kind == "speed":
-                ys = ys[3:]                                    # the first moments (standing start) are left out of the scale
+            ys = series(d, self.kind, r, self.win.compare_on(self.kind))[1]
+            if self.kind == "speed" and not self.win.compare_on(self.kind):
+                ys = ys[3:]                                    # the standing start is left out of the scale
             if ys:
                 lo = min(ys) if lo is None else min(lo, min(ys))
                 hi = max(ys) if hi is None else max(hi, max(ys))
         if lo is None:
             lo, hi = 0.0, 1.0
-        if self.kind in ("hp", "gap"):
+        if self.win.compare_on(self.kind):                     # centred on the field average
+            m = max(abs(lo), abs(hi)) or 1.0
+            lo, hi = -m, m
+        elif self.kind in ("hp", "gap"):
             lo = 0.0
         ticks = nice_ticks(lo, hi)
         return xmax, ticks[0], ticks[-1], ticks
 
     def value_at(self, r, x):
-        xs, ys = series(self.win.data, self.kind, r)
-        if not xs:
-            return None
-        if x > xs[-1] + 1e-9 or x < xs[0] - 1e-9:
+        xs, ys = series(self.win.data, self.kind, r, self.win.compare_on(self.kind))
+        if not xs or x > xs[-1] + 1e-9 or x < xs[0] - 1e-9:
             return None
         i = bisect.bisect_left(xs, x)
         if i == 0:
@@ -220,7 +356,9 @@ class ChartView(QWidget):
     def paintEvent(self, _e):
         p = QPainter(self)
         p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing)
-        p.fillRect(self.rect(), QColor(THEME["card"]))
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(self.rect()), 12, 12)
+        p.fillPath(path, QColor(THEME["card"]))
         d = self.win.data
         if not d:
             return
@@ -230,8 +368,7 @@ class ChartView(QWidget):
         if self.kind in ("speed", "hp") and not d["has_speed"]:
             p.setPen(sub)
             p.setFont(ov.fnt(14))
-            p.drawText(QRectF(0, 0, self.width(), self.height()), Qt.AlignmentFlag.AlignCenter,
-                       "This race has no speed or stamina data.")
+            p.drawText(QRectF(self.rect()), Qt.AlignmentFlag.AlignCenter, "This race has no speed or stamina data.")
             return
         pr = self.plot_rect()
         xmax, ylo, yhi, ticks = self.ranges()
@@ -244,7 +381,16 @@ class ChartView(QWidget):
             f = (y - ylo) / span
             return pr.top() + pr.height() * (f if inv else 1.0 - f)
 
-        if xk == "dist":                                     # race phases as soft bands
+        p.setPen(QColor(THEME["text"]))
+        p.setFont(ov.fnt(15, True))
+        cmp_on = self.win.compare_on(self.kind)
+        if cmp_on:
+            head = {"speed": "Speed compared to the field   (m/s: above 0 = faster than the others)",
+                    "hp": "Stamina compared to the field   (%: above 0 = more stamina left than the others)"}[self.kind]
+        else:
+            head = "%s%s" % (title, ("   (%s)" % ylab) if ylab else "")
+        p.drawText(QRectF(18, 8, pr.width() - 120, 24), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, head)
+        if xk == "dist":                                     # race parts as soft bands
             for a, b, name in PHASES:
                 if name == "Middle":
                     p.fillRect(QRectF(px(a * xmax), pr.top(), px(b * xmax) - px(a * xmax), pr.height()), QColor(255, 255, 255, 9))
@@ -252,28 +398,23 @@ class ChartView(QWidget):
                 p.setPen(sub)
                 p.drawText(QRectF(px(a * xmax), pr.top() - 18, px(b * xmax) - px(a * xmax), 16), Qt.AlignmentFlag.AlignCenter, name)
         p.setFont(ov.fnt(10, mono=True))
-        for t in ticks:                                       # y grid
+        for t in ticks:
             y = py(t)
             p.setPen(QPen(line, 1))
             p.drawLine(QPointF(pr.left(), y), QPointF(pr.right(), y))
             p.setPen(sub)
             p.drawText(QRectF(0, y - 8, pr.left() - 6, 16), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, "%g" % t)
-        for t in nice_ticks(0, xmax, 8):                      # x labels
+        for t in nice_ticks(0, xmax, 8):
             if t > xmax + 1e-6:
                 continue
-            x = px(t)
-            p.setPen(QPen(line, 1))
-            p.drawLine(QPointF(x, pr.bottom()), QPointF(x, pr.bottom() + 4))
             p.setPen(sub)
-            p.drawText(QRectF(x - 30, pr.bottom() + 5, 60, 16), Qt.AlignmentFlag.AlignCenter, "%g" % t)
-        p.setPen(sub)
-        p.setFont(ov.fnt(11, True))
-        p.drawText(QRectF(pr.left(), 4, pr.width(), 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                   "%s%s" % (title, ("  (%s)" % ylab) if ylab else ""))
-        p.setFont(ov.fnt(10))
-        p.drawText(QRectF(pr.left(), pr.bottom() + 20, pr.width(), 16), Qt.AlignmentFlag.AlignCenter,
-                   "Distance (m)" if xk == "dist" else "Race time (s)")
-        if self.kind == "hp":                                 # empty tank
+            p.drawText(QRectF(px(t) - 30, pr.bottom() + 6, 60, 16), Qt.AlignmentFlag.AlignCenter, "%g" % t)
+        p.drawText(QRectF(pr.left(), pr.bottom() + 22, pr.width(), 16), Qt.AlignmentFlag.AlignCenter,
+                   "Metres" if xk == "dist" else "Seconds")
+        if cmp_on:
+            p.setPen(QPen(QColor(255, 255, 255, 150), 1.5))
+            p.drawLine(QPointF(pr.left(), py(0)), QPointF(pr.right(), py(0)))
+        elif self.kind == "hp":
             p.setPen(QPen(QColor("#ff6b81"), 1, Qt.PenStyle.DashLine))
             p.drawLine(QPointF(pr.left(), py(0)), QPointF(pr.right(), py(0)))
 
@@ -282,16 +423,15 @@ class ChartView(QWidget):
         p.setClipRect(pr.adjusted(-2, -3, 3, 3))
         order = [n for n in range(len(d["runners"])) if n not in self.win.hidden and n != hl]
         if hl is not None and hl not in self.win.hidden:
-            order.append(hl)                                  # the followed uma is drawn last (on top)
+            order.append(hl)
         for n in order:
             r = d["runners"][n]
-            xs, ys = series(d, self.kind, r)
+            xs, ys = series(d, self.kind, r, self.win.compare_on(self.kind))
             if len(xs) < 2:
                 continue
-            col = QColor(r["color"])
-            w = 1.5
+            col, w = QColor(r["color"]), 2.0
             if hl is not None:
-                w, col = (3.0, col) if n == hl else (1.2, QColor(col.red(), col.green(), col.blue(), 70))
+                w, col = (3.6, col) if n == hl else (1.3, QColor(col.red(), col.green(), col.blue(), 60))
             path = QPainterPath(QPointF(px(xs[0]), py(ys[0])))
             for x, y in zip(xs[1:], ys[1:]):
                 path.lineTo(px(x), py(y))
@@ -308,280 +448,286 @@ class ChartView(QWidget):
                 tri.lineTo(px(x) + 4, pr.bottom() + 6)
                 tri.closeSubpath()
                 p.fillPath(tri, col)
-
         if self.hx is not None and pr.left() <= self.hx <= pr.right():
             p.setPen(QPen(QColor(255, 255, 255, 110), 1, Qt.PenStyle.DashLine))
             p.drawLine(QPointF(self.hx, pr.top()), QPointF(self.hx, pr.bottom()))
-        self.draw_legend(p, pr, xmax, xk)
-
-    def draw_legend(self, p, pr, xmax, xk):
-        d, ov = self.win.data, self.win.ov
-        x0 = self.width() - LEG_W + 6
-        cur = None
-        if self.hx is not None and pr.left() <= self.hx <= pr.right():
             cur = (self.hx - pr.left()) / pr.width() * xmax
-        p.setFont(ov.fnt(10, True))
-        p.setPen(QColor(THEME["sub"]))
-        head = ("at %.0f m" % cur if xk == "dist" else "at %.1f s" % cur) if cur is not None else "end of the race"
-        p.drawText(QRectF(x0, 6, LEG_W - 10, 18), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, head)
-        rows = d["runners"]
-        rh = min(24.0, max(16.0, (self.height() - 40) / float(max(1, len(rows)))))
-        self.leg_rows = []
-        for n, r in enumerate(rows):
-            y = 30 + n * rh
-            rect = QRectF(x0, y, LEG_W - 10, rh - 2)
-            self.leg_rows.append((rect, n))
-            hidden = n in self.win.hidden
-            if n == self.win.hl:
-                p.fillRect(rect, QColor(255, 255, 255, 28))
-            col = QColor(r["color"])
-            col.setAlphaF(0.25 if hidden else 1.0)
-            p.fillRect(QRectF(x0 + 4, y + rh / 2.0 - 4, 14, 5), col)
-            p.setFont(ov.fnt(11, n == self.win.hl))
-            p.setPen(QColor(THEME["sub"] if hidden else THEME["text"]))
-            fm = QFontMetrics(p.font())
-            p.drawText(QRectF(x0 + 24, y, LEG_W - 100, rh - 2), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                       fm.elidedText("%s. %s" % (r["place"], r["name"]), Qt.TextElideMode.ElideRight, LEG_W - 100))
-            if not hidden:
-                if cur is not None:
-                    v = self.value_at(r, cur)
-                else:
-                    xs, ys = series(d, self.kind, r)
-                    v = ys[-1] if ys else None
-                p.setFont(ov.fnt(11, mono=True))
-                p.drawText(QRectF(x0, y, LEG_W - 12, rh - 2), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                           "" if v is None else ("%.1f" % v))
+            p.setPen(QColor(THEME["yellow"]))
+            p.setFont(ov.fnt(11, True))
+            p.drawText(QRectF(pr.right() - 160, 8, 160, 24), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                       ("%.0f m" % cur) if xk == "dist" else ("%.1f s" % cur))
 
     def mouseMoveEvent(self, ev):
         self.hx = ev.position().x()
+        pr = self.plot_rect()
+        d = self.win.data
+        if d and pr.left() <= self.hx <= pr.right():
+            xmax = self.ranges()[0]
+            cur = (self.hx - pr.left()) / pr.width() * xmax
+            self.win.set_hover({n: self.value_at(r, cur) for n, r in enumerate(d["runners"])})
+        else:
+            self.win.set_hover(None)
         self.update()
 
     def leaveEvent(self, _ev):
         self.hx = None
+        self.win.set_hover(None)
         self.update()
 
-    def mousePressEvent(self, ev):
+    def mousePressEvent(self, _ev):
         self.win.stop_auto()
-        for rect, n in getattr(self, "leg_rows", []):
-            if rect.contains(ev.position()):
-                if ev.button() == Qt.MouseButton.RightButton or ev.modifiers() & Qt.KeyboardModifier.ControlModifier:
-                    self.win.toggle_hidden(n)
-                else:
-                    self.win.set_hl(None if self.win.hl == n else n)
-                return
+
+STYLE_COL = {"Front": "#4aa3ff", "Pace": "#59d98e", "Late": "#ffd24a", "End": "#ff9f43"}
+MOODS = {"Max": ("↑", "#ff6fae"), "High": ("↗", "#ff9a6f"), "Normal": ("→", "#ffd24a"),
+         "Low": ("↘", "#6cb8ff"), "Min": ("↓", "#b56cff")}
+PLACE_COL = {1: "#ffd24a", 2: "#e6ebf5", 3: "#ff9a6f"}
+COLUMNS = ("FINISH", "NO.", "UMA", "TIME", "STYLE / MOOD", "START DELAY", "LAST SPURT", "HP RESULT", "DUEL", "PACE", "STATS")
 
 
-class SkillsView(QWidget):
-    """One row per uma, one mark for every skill that really activated, placed on the track."""
-    LEFT = 200
-    RIGHT = 70
+def fmt_clock(sec):
+    if not sec or sec <= 0:
+        return "-"
+    return "%d:%07.4f" % (int(sec // 60), sec - 60 * int(sec // 60))
 
-    def __init__(self, win):
-        super().__init__()
+
+class CellDelegate(QStyledItemDelegate):
+    """Draws the cells of the table like the Hakuraku results table: big numbers, two lines, round badges."""
+
+    def __init__(self, win, table):
+        super().__init__(table)
         self.win = win
-        self.setMouseTracking(True)
-        self.setMinimumSize(520, 300)
 
-    def geo(self):
-        d = self.win.data
-        n = max(1, len(d["runners"])) if d else 1
-        top = 34.0
-        rh = min(34.0, (self.height() - top - 28) / float(n))
-        return top, rh, self.LEFT, self.width() - self.RIGHT
-
-    def paintEvent(self, _e):
-        p = QPainter(self)
-        p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing)
-        p.fillRect(self.rect(), QColor(THEME["card"]))
-        d = self.win.data
-        if not d:
-            return
-        ov = self.win.ov
-        top, rh, x0, x1 = self.geo()
-        sub = QColor(THEME["sub"])
-        total = d["total"]
-
-        def px(x):
-            return x0 + (x1 - x0) * x / total
-
-        for a, b, name in PHASES:
-            if name == "Middle":
-                p.fillRect(QRectF(px(a * total), top, px(b * total) - px(a * total), rh * len(d["runners"])), QColor(255, 255, 255, 9))
-            p.setFont(ov.fnt(10))
+    def paint(self, p, option, index):
+        data = index.data(Qt.ItemDataRole.UserRole + 1)
+        if not data:
+            return super().paint(p, option, index)
+        ov, rect = self.win.ov, QRectF(option.rect)
+        p.save()
+        p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing | QPainter.RenderHint.SmoothPixmapTransform)
+        n = index.data(Qt.ItemDataRole.UserRole)
+        if n == self.win.hl:
+            p.fillRect(rect, QColor(255, 111, 174, 40))
+        p.setPen(QPen(QColor(255, 255, 255, 14), 1))
+        p.drawLine(rect.bottomLeft(), rect.bottomRight())
+        k = data["k"]
+        text, sub = QColor(THEME["text"]), QColor(THEME["sub"])
+        mid = Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
+        if k == "num":
+            p.setFont(ov.fnt(17, True))
+            p.setPen(QColor(data.get("color") or THEME["text"]))
+            p.drawText(rect, mid, data["text"])
+        elif k == "uma":
+            r = self.win.data["runners"][data["n"]]
+            pic = rect.height() - 12
+            uma_face(ov, p, r, QRectF(rect.left() + 8, rect.top() + 6, pic, pic))
+            p.setFont(ov.fnt(13, True))
+            p.setPen(QColor(r["color"]))
+            tx = rect.left() + pic + 18
+            fm = QFontMetrics(p.font())
+            p.drawText(QRectF(tx, rect.top() + 8, rect.right() - tx - 4, rect.height() / 2 - 6), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                       fm.elidedText(r["name"], Qt.TextElideMode.ElideRight, int(rect.right() - tx - 6)))
+            p.setFont(ov.fnt(11))
             p.setPen(sub)
-            p.drawText(QRectF(px(a * total), 6, px(b * total) - px(a * total), 18), Qt.AlignmentFlag.AlignCenter, name)
-        for n, r in enumerate(d["runners"]):
-            y = top + n * rh
-            if n == self.win.hl:
-                p.fillRect(QRectF(0, y, self.width(), rh), QColor(255, 255, 255, 24))
-            col = QColor(r["color"])
-            p.setFont(ov.fnt(11, n == self.win.hl))
-            p.setPen(QColor(THEME["text"]))
-            p.drawText(QRectF(10, y, self.LEFT - 16, rh), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                       QFontMetrics(p.font()).elidedText("%s. %s" % (r["place"], r["name"]), Qt.TextElideMode.ElideRight, self.LEFT - 16))
-            p.setPen(QPen(QColor(THEME["line"]), 1))
-            p.drawLine(QPointF(x0, y + rh / 2), QPointF(x1, y + rh / 2))
-            for a in r["acts"]:
-                if a["dist"] is None:
-                    continue
-                x = px(min(total, a["dist"]))
-                m = QPainterPath()
-                m.addRoundedRect(QRectF(x - 3, y + rh * 0.18, 6, rh * 0.64), 2, 2)
-                p.fillPath(m, col)
-            p.setPen(sub)
-            p.setFont(ov.fnt(10, mono=True))
-            p.drawText(QRectF(x1 + 8, y, self.RIGHT - 10, rh), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                       "%d / %d" % (len(r["acts"]), len(r["brought"])) if r["brought"] else "%d" % len(r["acts"]))
-        p.setPen(sub)
-        p.setFont(ov.fnt(10))
-        base = top + rh * len(d["runners"])
-        for t in nice_ticks(0, total, 8):
-            if t <= total + 1e-6:
-                p.drawText(QRectF(px(t) - 30, base + 4, 60, 16), Qt.AlignmentFlag.AlignCenter, "%g" % t)
-        p.drawText(QRectF(x0, base + 18, x1 - x0, 14), Qt.AlignmentFlag.AlignCenter, "Distance (m)    -    activated / brought")
-
-    def row_at(self, pos):
-        top, rh, x0, x1 = self.geo()
-        n = int((pos.y() - top) // rh) if rh else -1
-        d = self.win.data
-        return n if d and 0 <= n < len(d["runners"]) else None
-
-    def mouseMoveEvent(self, ev):
-        d = self.win.data
-        n = self.row_at(ev.position())
-        if not d or n is None:
-            QToolTip.hideText()
-            return
-        top, rh, x0, x1 = self.geo()
-        best = None
-        for a in d["runners"][n]["acts"]:
-            if a["dist"] is None:
-                continue
-            dx = abs(x0 + (x1 - x0) * min(d["total"], a["dist"]) / d["total"] - ev.position().x())
-            if dx <= 6 and (best is None or dx < best[0]):
-                best = (dx, a)
-        if best:
-            a = best[1]
-            QToolTip.showText(ev.globalPosition().toPoint(), "%s\n%.1f s  -  %.0f m" % (a["name"], a["t"], a["dist"]), self)
-        else:
-            QToolTip.hideText()
-
-    def mousePressEvent(self, ev):
-        self.win.stop_auto()
-        n = self.row_at(ev.position())
-        if n is not None:
-            self.win.set_hl(None if self.win.hl == n else n)
-
-
-class NumItem(QTableWidgetItem):
-    def __init__(self, text, key):
-        super().__init__(text)
-        self.key = key
-        self.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
-    def __lt__(self, other):
-        a, b = self.key, getattr(other, "key", None)
-        if a is None or b is None:
-            return (a is not None) and (b is None)
-        return a < b
+            p.drawText(QRectF(tx, rect.top() + rect.height() / 2, rect.right() - tx - 4, rect.height() / 2 - 8), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+                       "[%s]" % r["trainer"] if r["trainer"] else "")
+        elif k == "two":
+            p.setFont(ov.fnt(13, True))
+            p.setPen(QColor(data.get("ac") or THEME["text"]))
+            p.drawText(QRectF(rect.left(), rect.top() + 8, rect.width(), rect.height() / 2 - 4), mid, data["a"])
+            if data.get("b"):
+                bc = data.get("bc")
+                p.setFont(ov.fnt(11, bool(bc)))
+                sr = QRectF(rect.left(), rect.top() + rect.height() / 2 - 2, rect.width(), rect.height() / 2 - 6)
+                if bc:                                             # a small coloured pill
+                    w = QFontMetrics(p.font()).horizontalAdvance(data["b"]) + 14
+                    pill = QRectF(rect.center().x() - w / 2, sr.top() + 2, w, 17)
+                    pp = QPainterPath()
+                    pp.addRoundedRect(pill, 4, 4)
+                    p.fillPath(pp, QColor(bc).darker(300))
+                    p.setPen(QColor(bc))
+                    p.drawText(pill, Qt.AlignmentFlag.AlignCenter, data["b"])
+                else:
+                    p.setPen(sub)
+                    p.drawText(sr, mid | Qt.AlignmentFlag.AlignTop, data["b"])
+        elif k == "style":
+            col = QColor(STYLE_COL.get(data["style"], "#aaaaaa"))
+            d = min(rect.height() - 16, 44.0)
+            cx = rect.center().x()
+            badge = QRectF(cx - d - 3, rect.center().y() - d / 2, d, d)
+            p.setBrush(QColor("#f4f6fa"))
+            p.setPen(QPen(col, 3))
+            p.drawEllipse(badge)
+            p.setPen(QColor("#10161f"))
+            p.setFont(ov.fnt(10, True))
+            p.drawText(badge, Qt.AlignmentFlag.AlignCenter, data["style"].upper())
+            arrow, mc = MOODS.get(data["mood"], ("?", "#aaaaaa"))
+            mood = QRectF(cx + 3, rect.center().y() - d / 2, d, d)
+            p.setBrush(QColor(mc))
+            p.setPen(QPen(QColor("#ffffff"), 2))
+            p.drawEllipse(mood)
+            p.setPen(QColor("#ffffff"))
+            p.setFont(ov.fnt(20, True))
+            p.drawText(mood, Qt.AlignmentFlag.AlignCenter, arrow)
+        elif k == "stat":
+            p.setFont(ov.fnt(12, mono=True))
+            rows = data["vals"]
+            colw = rect.width() / 3.0
+            for i, (label, val, col) in enumerate(rows):
+                cell = QRectF(rect.left() + (i % 3) * colw, rect.top() + (rect.height() / 2 - 20) + (i // 3) * 20, colw, 20)
+                p.setPen(QColor(col))
+                p.drawText(QRectF(cell.left() + 2, cell.top(), 22, 20), Qt.AlignmentFlag.AlignVCenter, label)
+                p.setPen(text)
+                p.drawText(QRectF(cell.left() + 22, cell.top(), colw - 24, 20), Qt.AlignmentFlag.AlignVCenter, str(val))
+        p.restore()
 
 
 class TableView(QTableWidget):
+    """All umas, one row each, like the results table on Hakuraku. Click a row to see her skills below."""
+
     def __init__(self, win):
         super().__init__()
         self.win = win
+        self.tries = 0
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.setAlternatingRowColors(False)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.verticalHeader().hide()
+        self.verticalHeader().setDefaultSectionSize(66)
         self.setShowGrid(False)
+        self.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.setItemDelegate(CellDelegate(win, self))
+        self.setStyleSheet("QTableWidget{background:%s;border:none;border-radius:12px;}"
+                           "QHeaderView::section{background:#1b2336;color:#e6ebf5;font-weight:800;padding:10px 4px;border:none;"
+                           "border-bottom:2px solid #3b4a72;}" % THEME["card"])
         self.cellClicked.connect(self.on_click)
 
     def fill(self, d):
-        self.setSortingEnabled(False)
-        stats = d and any(r["stats"] for r in d["runners"])
-        cols = ["#", "Uma", "Player", "Style", "Time", "Gap", "Top m/s", "Avg m/s", "Stamina", "Dry at",
-                "Tempted", "Blocked", "Skills"] + (["Spd", "Sta", "Pow", "Gut", "Wit"] if stats else [])
-        self.setColumnCount(len(cols))
-        self.setHorizontalHeaderLabels(cols)
+        self.setColumnCount(len(COLUMNS))
+        self.setHorizontalHeaderLabels(COLUMNS)
         rows = d["runners"] if d else []
         self.setRowCount(len(rows))
+        win_speed = (rows[0]["speed"][-1] if rows and rows[0]["speed"] else None)
         for i, r in enumerate(rows):
-            def num(v, fmt, nd=None):
-                return NumItem("–" if v is None else fmt % v, v)
-            cells = [NumItem(str(r["place"]), r["place"]), QTableWidgetItem(r["name"]), QTableWidgetItem(r["trainer"]),
-                     QTableWidgetItem(r["style"]), NumItem(r["time"], r["raw_time"] or None), NumItem(r["gap"], r["raw_time"] or None),
-                     num(r["top_speed"], "%.2f"), num(r["avg_speed"], "%.2f"),
-                     num(r["hp_left"], "%.0f%%"), NumItem("no" if r["empty_at"] is None and r["hp0"] else ("–" if r["hp0"] is None else "%.0f m" % r["empty_at"]),
-                                                          (1e9 if r["empty_at"] is None else r["empty_at"]) if r["hp0"] else None),
-                     NumItem("%.1f s" % r["tempted"] if d["has_speed"] else "–", r["tempted"] if d["has_speed"] else None),
-                     NumItem("%.1f s" % r["blocked"] if d["has_speed"] else "–", r["blocked"] if d["has_speed"] else None),
-                     NumItem("%d / %d" % (len(r["acts"]), len(r["brought"])) if r["brought"] else str(len(r["acts"])), len(r["acts"]))]
-            if stats:
-                st = r["stats"] or {}
-                cells += [NumItem("–" if st.get(k) is None else str(st.get(k)), st.get(k)) for k in ("Spd", "Sta", "Pow", "Gut", "Wit")]
-            for c, it in enumerate(cells):
-                if c in (1, 2, 3):
-                    it.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            gap = ""
+            if i and r["raw_time"] and rows[0]["raw_time"]:
+                dt = r["raw_time"] - rows[0]["raw_time"]
+                gap = ("+%.1fm" % (dt * win_speed)) if win_speed else ("+%.3fs" % dt)
+            late = (r["start_delay"] or 0.0) > 0.08
+            hp_txt = ""
+            if r["hp"] and r["hp0"]:
+                hp_txt = "%d HP (%.1f%%)" % (r["hp"][-1], 100.0 * r["hp"][-1] / r["hp0"])
+            dry = r["empty_at"] is not None
+            ls_speed = None
+            if r["last_spurt_at"] and r["speed"]:
+                after = [s for dd, s in zip(r["dist"], r["speed"]) if dd >= r["last_spurt_at"]]
+                ls_speed = max(after) if after else None
+            st = r["stats"] or {}
+            stats = [("SPD", st.get("Spd"), "#4aa3ff"), ("STA", st.get("Sta"), "#ff7a7a"), ("POW", st.get("Pow"), "#ffb347"),
+                     ("GUT", st.get("Gut"), "#ff8fb5"), ("WIT", st.get("Wit"), "#5de6c2")]
+            cells = [
+                {"k": "num", "text": str(r["place"]), "color": PLACE_COL.get(r["place"])},
+                {"k": "num", "text": str(r["h"].id or "-")},
+                {"k": "uma", "n": i},
+                {"k": "two", "a": fmt_clock(r["raw_time"]), "b": gap},
+                {"k": "style", "style": r["style"], "mood": r["mood"]},
+                {"k": "two", "a": ("%.1fms" % (r["start_delay"] * 1000.0)) if r["start_delay"] is not None else "-",
+                 "b": ("Late" if late else "Normal") if r["start_delay"] is not None else "", "bc": "#ff6b81" if late else "#5de6c2"},
+                {"k": "two", "a": ("from %.0f m" % r["last_spurt_at"]) if r["last_spurt_at"] else "-",
+                 "b": ("Speed: %.2f" % ls_speed) if ls_speed else ""},
+                {"k": "two", "a": ("Ran dry at %.0f m" % r["empty_at"]) if dry else ("Survived" if r["hp"] else "-"),
+                 "ac": "#ff8fa3" if dry else "#5de6c2", "b": hp_txt},
+                {"k": "two", "a": ("from %.1f s" % r["duel_at"]) if r.get("duel_at") is not None else "-"},
+                {"k": "two", "a": ("%.1fs rushed" % r["tempted"]) if r["tempted"] > 0.05 else "-"},
+                {"k": "stat", "vals": [x for x in stats if x[1] is not None]},
+            ]
+            for c, data in enumerate(cells):
+                it = QTableWidgetItem("")
                 it.setData(Qt.ItemDataRole.UserRole, i)
+                it.setData(Qt.ItemDataRole.UserRole + 1, data)
                 self.setItem(i, c, it)
-            self.item(i, 1).setForeground(QColor(r["color"]))
-            self.item(i, 1).setFont(QFont(self.font().family(), self.font().pointSize(), QFont.Weight.Bold))
-        self.setSortingEnabled(True)
-        self.sortItems(0, Qt.SortOrder.AscendingOrder)
         hh = self.horizontalHeader()
-        hh.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        hh.setStretchLastSection(False)
+        hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        for c, w in enumerate((58, 46, 180, 96, 112, 96, 104, 132, 84, 92, 190)):
+            self.setColumnWidth(c, w)
+        hh.setStretchLastSection(True)
+        self.tries = 0
+
+    def refresh_icons(self):
+        """The pictures arrive a little after the race: draw again until they are there."""
+        self.viewport().update()
+        self.tries += 1
 
     def on_click(self, row, _col):
         self.win.stop_auto()
         it = self.item(row, 0)
         if it is not None:
-            n = it.data(Qt.ItemDataRole.UserRole)
-            self.win.set_hl(None if self.win.hl == n else n)
+            self.win.set_hl(it.data(Qt.ItemDataRole.UserRole))
 
     def mark(self, hl):
-        for row in range(self.rowCount()):
-            it = self.item(row, 0)
-            if it is not None and hl is not None and it.data(Qt.ItemDataRole.UserRole) == hl:
-                self.selectRow(row)
-                return
-        self.clearSelection()
+        self.viewport().update()
+
+
+def skills_html(r):
+    """Hit and missed skills of one uma, with the reason for every miss."""
+    sub, ok, bad, mid = THEME["sub"], "#5de6c2", "#ff8fa3", "#ffd24a"
+    kinds = {"cond": bad, "wit": mid, "unknown": sub}
+    left = ["<b style='color:%s;font-size:14px'>Hit (%d)</b>" % (ok, len(r["hit"]))]
+    for e in r["hit"]:
+        extra = ("  x%d" % e["count"]) if e["count"] > 1 else ""
+        where = (" - %.1f s, %.0f m" % (e["t"], e["dist"])) if e["dist"] is not None else (" - %.1f s" % e["t"])
+        left.append("<span style='color:%s'>&#10004;</span> %s%s <span style='color:%s'>%s</span>" % (ok, e["name"], extra, sub, where))
+    right = ["<b style='color:%s;font-size:14px'>Missed (%d)</b>" % (bad, len(r["miss"]))]
+    for e in r["miss"]:
+        col = kinds.get(e["kind"], sub)
+        right.append("<span style='color:%s'>&#10008;</span> %s <span style='color:%s'> - %s</span>" % (col, e["name"], col, e["text"]))
+    if not r["brought"]:
+        right.append("<span style='color:%s'>The skills she brought are not known for this race.</span>" % sub)
+    head = "<span style='font-size:15px;font-weight:700;color:%s'>%s</span>" % (r["color"], r["name"])
+    if r.get("wit_chance"):
+        head += "  <span style='color:%s'>wit check: about %.0f%% to pass</span>" % (sub, r["wit_chance"])
+    note = ("<span style='color:%s;font-size:11px'>The game does not save why a skill missed. "
+            "<span style='color:%s'>red</span> = its condition was never true in this race (sure). "
+            "<span style='color:%s'>yellow</span> = it could have worked, so most likely the wit check (a guess). "
+            "grey = needs course details I do not have.</span>" % (sub, bad, mid))
+    return ("%s<table width='100%%' cellspacing='6'><tr><td valign='top' width='42%%'>%s</td><td valign='top'>%s</td></tr></table>%s"
+            % (head, "<br>".join(left), "<br>".join(right), note))
 
 
 class AnalysisWindow(QWidget):
-    PAGES = (("table", "Table"), ("speed", "Speed"), ("hp", "Stamina"), ("gap", "Gap"), ("lane", "Lane"), ("skills", "Skills"))
-    AUTO = ("table", "speed", "hp", "gap", "skills")
+    PAGES = (("table", "Table"), ("replay", "Replay"), ("speed", "Speed"), ("hp", "Stamina"), ("gap", "Gap"))
+    AUTO = ("table", "speed", "hp", "gap")
+    CHARTS = ("speed", "hp", "gap")
 
     def __init__(self, ov):
         super().__init__()
         self.ov = ov
         self.data = None
-        self.hl = None                  # the uma that is followed on every page
+        self.hl = None                  # the uma that is followed
         self.hidden = set()
+        self.hover = None               # {uma: value} while the mouse is over a chart
+        self.compare = True             # speed / stamina compared to the field average
+        self.auto = bool(ov.s.get("analysis_auto", True))
         self.pinned = False             # opened by hand: stays until you close it
         self.pending_at = None
         self.deadline = None
         self._count = 0
         self.setWindowTitle(ANALYSIS_NAME)
         self.setStyleSheet(build_theme_qss() + "AnalysisWindow{background:%s;} QLabel{color:%s;background:transparent;}"
-                           % (THEME["bg"], THEME["text"]))
+                           "QTextBrowser{background:%s;border:none;border-radius:12px;padding:8px;color:%s;}"
+                           % (THEME["bg"], THEME["text"], THEME["card"], THEME["text"]))
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.apply_flags()
 
-        v = QVBoxLayout(self)
-        v.setContentsMargins(12, 10, 12, 10)
-        v.setSpacing(8)
-        top = QHBoxLayout()
+        h = QHBoxLayout(self)
+        h.setContentsMargins(12, 12, 12, 12)
+        h.setSpacing(12)
+        self.ulist = UmaList(self)
+        h.addWidget(self.ulist)
+        right = QVBoxLayout()
+        right.setSpacing(8)
         self.lbl_title = QLabel("Analysis")
-        self.lbl_title.setStyleSheet("font-size:16px;font-weight:800;")
-        top.addWidget(self.lbl_title, 1)
-        self.cb_auto = QCheckBox("Change page by itself")
-        self.cb_auto.setChecked(bool(ov.s.get("analysis_auto", True)))
-        self.cb_auto.toggled.connect(self.on_auto)
-        top.addWidget(self.cb_auto)
-        v.addLayout(top)
+        self.lbl_title.setStyleSheet("font-size:17px;font-weight:800;")
+        right.addWidget(self.lbl_title)
         bar = QHBoxLayout()
         self.group = QButtonGroup(self)
         self.btns = {}
@@ -593,25 +739,41 @@ class AnalysisWindow(QWidget):
             self.group.addButton(b)
             bar.addWidget(b)
             self.btns[key] = b
-        bar.addStretch(1)
-        v.addLayout(bar)
+        self.btn_cmp = QPushButton("Compared to the field")
+        self.btn_cmp.setCheckable(True)
+        self.btn_cmp.setChecked(True)
+        self.btn_cmp.setToolTip("On: each line shows how far above or below the average of all umas she was. Off: the real numbers.")
+        self.btn_cmp.clicked.connect(self.on_compare)
+        bar.addWidget(self.btn_cmp)
+        right.addLayout(bar)
         self.stack = QStackedWidget()
-        self.views = {"table": TableView(self), "skills": SkillsView(self)}
-        for k in KINDS:
+        self.table = TableView(self)
+        self.detail = QTextBrowser()
+        self.detail.setOpenLinks(False)
+        split = QSplitter(Qt.Orientation.Vertical)
+        split.addWidget(self.table)
+        split.addWidget(self.detail)
+        split.setStretchFactor(0, 5)
+        split.setStretchFactor(1, 2)
+        self.replay = ReplayPage(self)
+        self.views = {"table": split, "replay": self.replay}
+        for k in ("speed", "hp", "gap"):
             self.views[k] = ChartView(self, k)
         for key, _l in self.PAGES:
             self.stack.addWidget(self.views[key])
-        v.addWidget(self.stack, 1)
-        self.lbl_hint = QLabel("Click an uma to follow her on every page. Ctrl+click or right-click on a chart: hide her.")
-        self.lbl_hint.setStyleSheet("color:%s;" % THEME["sub"])
-        v.addWidget(self.lbl_hint)
+        right.addWidget(self.stack, 1)
+        self.lbl_sel = QLabel("")
+        self.lbl_sel.setWordWrap(True)
+        self.lbl_sel.setStyleSheet("font-size:13px;")
+        right.addWidget(self.lbl_sel)
+        h.addLayout(right, 1)
         self.page = ov.s.get("analysis_page", "table")
         if self.page not in self.views:
             self.page = "table"
         self.show_page(self.page)
 
         g = ov.cfg.get("analysis_geo")
-        self.resize(1200, 660)
+        self.resize(1280, 720)
         if g and len(g) == 4 and not ov.args.reset_window:
             self.setGeometry(int(g[0]), int(g[1]), int(g[2]), int(g[3]))
         self.timer = QTimer(self)
@@ -634,6 +796,7 @@ class AnalysisWindow(QWidget):
     def hideEvent(self, ev):
         super().hideEvent(ev)
         self.pinned = False
+        self.replay.stop()
         self.remember()
         self.ov.refresh_tray()
 
@@ -649,18 +812,51 @@ class AnalysisWindow(QWidget):
             self.hide()
 
     # ----- data and pages ---------------------------------------------------------------
+    def compare_on(self, kind):
+        return self.compare and kind in ("speed", "hp")
+
+    def on_compare(self):
+        self.compare = self.btn_cmp.isChecked()
+        self.stop_auto()
+        self.refresh()
+
     def set_data(self, data):
         self.data = data
-        self.hl = None
+        self.hl = 0 if data and data["runners"] else None       # the winner is followed at the start
         self.hidden = set()
-        self.lbl_title.setText(("Analysis  -  %s" % data["title"]) if data else "Analysis  -  no race yet")
-        self.views["table"].fill(data)
+        self.hover = None
+        self.lbl_title.setText(data["title"] if data else "No race yet")
+        self.table.fill(data)
+        self.replay.set_data(data)
         self.refresh()
 
     def refresh(self):
-        self.views["table"].mark(self.hl)
-        for v in self.views.values():
+        d = self.data
+        sel = d["runners"][self.hl] if d and self.hl is not None and self.hl < len(d["runners"]) else None
+        self.table.mark(self.hl)
+        if sel is not None:
+            self.detail.setHtml(skills_html(sel))
+            bits = [sel["name"]]
+            if sel["top_speed"] is not None:
+                bits.append("top speed %.1f m/s" % sel["top_speed"])
+            if sel["hp_left"] is not None:
+                bits.append("stamina left %.0f%%" % sel["hp_left"])
+            if sel["tempted"] > 0.05:
+                bits.append("tempted %.1f s" % sel["tempted"])
+            if sel["blocked"] > 0.05:
+                bits.append("blocked %.1f s" % sel["blocked"])
+            self.lbl_sel.setText("  -  ".join(bits))
+        else:
+            self.detail.setHtml("<span style='color:%s'>Click an uma to see her skills.</span>" % THEME["sub"] if d else "")
+            self.lbl_sel.setText("Click an uma on the left to follow her." if d else "")
+        self.lbl_sel.setVisible(self.page in self.CHARTS)
+        for v in list(self.views.values()) + [self.ulist]:
             v.update()
+        self.replay.view.update()
+
+    def set_hover(self, vals):
+        self.hover = vals
+        self.ulist.update()
 
     def set_hl(self, n):
         self.hl = n
@@ -675,30 +871,42 @@ class AnalysisWindow(QWidget):
 
     def show_page(self, key):
         self.page = key
+        self.hover = None
         self.btns[key].setChecked(True)
         self.stack.setCurrentWidget(self.views[key])
-        self.views[key].update()
+        self.ulist.setVisible(key in self.CHARTS)
+        if key != "replay":
+            self.replay.stop()
+        self.btn_cmp.setVisible(key in ("speed", "hp"))
+        self.refresh()
 
     def on_page_click(self, key):
         self.stop_auto()
         self.show_page(key)
         self.ov.set_setting("analysis_page", key)
 
-    def stop_auto(self):
-        if self.cb_auto.isChecked():
-            self.cb_auto.setChecked(False)
-
-    def on_auto(self, on):
-        self.ov.set_setting("analysis_auto", bool(on))
+    def set_auto(self, on):
+        self.auto = bool(on)
         self._count = 0
 
+    def stop_auto(self):
+        if self.auto:
+            self.set_auto(False)
+            self.ov.set_setting("analysis_auto", False)
+
     def on_second(self):
-        if not self.isVisible() or not self.cb_auto.isChecked() or not self.data:
+        if self.isVisible():
+            self.ulist.update()
+            if self.table.tries < 20:
+                self.table.refresh_icons()          # the pictures arrive a little later
+        if not self.isVisible() or not self.auto or not self.data:
             return
         self._count += 1
         if self._count >= max(2, int(float(self.ov.s.get("analysis_page_seconds", 8.0)))):
             self._count = 0
             pages = [k for k in self.AUTO if self.data["has_speed"] or k not in ("speed", "hp")]
+            if self.page == "replay":
+                return
             i = pages.index(self.page) if self.page in pages else -1
             self.show_page(pages[(i + 1) % len(pages)])
 
@@ -726,9 +934,9 @@ class AnalysisWindow(QWidget):
             data = build_analysis(self.ov)
             if data:
                 self.set_data(data)
-                if self.ov.s.get("analysis_auto", True):
+                self.set_auto(bool(self.ov.s.get("analysis_auto", True)))
+                if self.auto:
                     self.show_page(self.AUTO[0])
-                self._count = 0
                 if not self.isVisible():
                     self.show()
                 self.deadline = None if self.hold_forever() else now + self.stay()
@@ -741,10 +949,8 @@ class AnalysisWindow(QWidget):
         data = build_analysis(self.ov)
         if data is None:
             data = self.ov.sample_analysis()
-        self.pinned = True
-        self.pending_at = None
-        self.deadline = None
         self.set_data(data)
+        self.set_auto(False)
         self.show()
         self.raise_()
         self.activateWindow()

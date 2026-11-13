@@ -147,7 +147,7 @@ def payload_from_saved_race(path):
         })
         rmap[fo] = {
             "fo": fo, "chara_id": h["charaId"], "card_id": rd.get("card_id", h["charaId"] * 100 + 1),
-            "finishOrder": h["finishOrder"], "finishTimeRaw": h["finishTimeRaw"], "raceParam": h.get("raceParam"),
+            "finishOrder": h["finishOrder"], "finishTimeRaw": h["finishTimeRaw"], "raceParam": h.get("raceParam"), "popularity": h.get("popularity"),
         }
     dist = d["raceCourseSet"]["distance"]
     info = {
