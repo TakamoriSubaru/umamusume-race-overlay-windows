@@ -23,7 +23,7 @@ ANALYSIS_NAME = "Umamusume Analysis (%s)" % PLATFORM       # window name of the 
 RESULTS_NAME = "Umamusume Race Results (%s)" % PLATFORM   # window name of the results board (pick it in OBS)
 
 
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.7.0"
 
 
 SLIDE_SECONDS = 0.45       # how long the tower takes to slide in / out
