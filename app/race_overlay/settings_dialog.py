@@ -771,16 +771,13 @@ class SettingsDialog(QDialog):
         sp_ls.setValue(float(s.get("luck_seconds", 10.0)))
         sp_ls.valueChanged.connect(lambda v: ov.set_setting("luck_seconds", float(v)))
         fl.addRow("Stays", sp_ls)
-        bnote = QLabel("<i>Each board has its own tab here with its own size and look. The standings board also has settings in the Scoring "
-                       "System tab. Each board is its own window in OBS. Drag a board to move it, pull its edges to resize it.</i>")
+        bnote = QLabel("<i>Each board is its own window in OBS and has its own tab here.</i>")
         bnote.setWordWrap(True)
         bv.insertWidget(0, bnote)
 
         gtime = QGroupBox("When the boards come in")
         tl = QVBoxLayout(gtime)
-        tn = QLabel("After a race the results board comes in first. Every other board can come in <b>one after "
-                    "the other</b> or <b>together with the results board</b>, so you can show all of them at once. "
-                    "Put each board in its own place in OBS. The seconds are extra waiting time.")
+        tn = QLabel("The results board comes in first. Pick when each other board comes in.")
         tn.setWordWrap(True)
         tl.addWidget(tn)
         tf = QFormLayout()
@@ -837,14 +834,14 @@ class SettingsDialog(QDialog):
         lpv.addStretch(1)
         match_page = QWidget()            # Match board
         mpv = QVBoxLayout(match_page)
-        mn = QLabel("<i>The teams, picks and score of the match board are in the Draft tab.</i>")
+        mn = QLabel("<i>Teams and score: Draft tab.</i>")
         mn.setWordWrap(True)
         mpv.addWidget(mn)
         mpv.addWidget(self.board_look_group(ov.mboard, "match board"))
         mpv.addStretch(1)
         stand_page = QWidget()            # Standings board
         spv = QVBoxLayout(stand_page)
-        sn = QLabel("<i>The rows, title, avatars and pages of the standings board are in the Scoring System tab (Board look).</i>")
+        sn = QLabel("<i>Rows, title and pages: Scoring System tab.</i>")
         sn.setWordWrap(True)
         spv.addWidget(sn)
         spv.addWidget(self.board_look_group(ov.standings, "standings board"))
@@ -2071,32 +2068,50 @@ class SettingsDialog(QDialog):
 
     def board_look_group(self, board, name):
         """Size and look of one board. Empty = the same as the Tower (or the default for all boards)."""
+        from .constants import THEME_PRESETS
         ov = self.ov
         p = board.PREFIX
         key = lambda k: "%s_look_%s" % (p, k)
-        g = QGroupBox("Size and look of the " + name)
+        g = QGroupBox("Look")
         f = QFormLayout(g)
-        SAME = "Same as the Tower"
+        SAME = "Tower"
+        glob = {"bg": "bg", "text": "text_color", "sub": "sub_color", "accent": "accent"}
+        btns = {}
+
+        def paint(k):
+            v = ov.s.get(key(k), "")
+            self.swatch(btns[k], v or ov.s.get(glob[k]) or "#f5c518")
+            if not v:
+                btns[k].setText(SAME)
+
+        # colour sets: one click sets the four colours of this board
+        grid = QGridLayout()
+        grid.setSpacing(6)
+        for n, (nm, preset) in enumerate(THEME_PRESETS.items()):
+            chip = QPushButton(nm.replace(" (default)", ""))
+            chip.setMinimumWidth(10)
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setStyleSheet("QPushButton{background-color:%s;color:%s;border:2px solid %s;border-radius:9px;"
+                               "padding:5px 2px;font-weight:700;font-size:11px;}QPushButton:hover{border-color:%s;}"
+                               % (preset["bg"], preset["text_color"], preset["accent"], preset["text_color"]))
+
+            def use(_c=False, preset=preset):
+                for k, pk in (("bg", "bg"), ("text", "text_color"), ("sub", "sub_color"), ("accent", "accent")):
+                    ov.set_setting(key(k), preset[pk])
+                    paint(k)
+                board.update()
+            chip.clicked.connect(use)
+            grid.addWidget(chip, n // 4, n % 4)
+        f.addRow(grid)
 
         sp = QSpinBox()
         sp.setRange(30, 300)
         sp.setSingleStep(5)
         sp.setSuffix(" %")
         sp.setValue(int(round(board.pref_scale * 100)))
-        sp.setToolTip("The size of this board. You can also pull its edges.")
         sp.valueChanged.connect(lambda v: board.set_size_pct(v))
         f.addRow("Size", sp)
         self._size_spins.append((board, sp))
-
-        glob = {"bg": "bg", "text": "text_color", "sub": "sub_color", "accent": "accent"}
-        btns = {}
-
-        def paint(k):
-            v = ov.s.get(key(k), "")
-            shown = v or ov.s.get(glob[k]) or "#f5c518"
-            self.swatch(btns[k], shown)
-            if not v:
-                btns[k].setText(SAME)
 
         def choose(k):
             cur = ov.s.get(key(k), "") or ov.s.get(glob[k]) or "#f5c518"
@@ -2110,19 +2125,23 @@ class SettingsDialog(QDialog):
             ov.set_setting(key(k), "")
             paint(k)
             board.update()
-        for k, label in (("bg", "Background"), ("text", "Text colour"), ("sub", "Second text colour"), ("accent", "Accent colour")):
+
+        def colour_row(form, k, label):
             row = QHBoxLayout()
             b = QPushButton()
             b.setMinimumWidth(10)
-            b.clicked.connect(lambda _c=False, k=k: choose(k))
-            r = QPushButton("Same")
-            r.setToolTip("Use the colour of the Tower again")
+            b.clicked.connect(lambda _c=False: choose(k))
+            r = QPushButton("Tower")
+            r.setToolTip("Use the Tower's colour again")
             r.setMinimumWidth(10)
-            r.clicked.connect(lambda _c=False, k=k: same(k))
+            r.clicked.connect(lambda _c=False: same(k))
             row.addWidget(b, 1)
             row.addWidget(r)
-            f.addRow(label, row)
+            form.addRow(label, row)
             btns[k] = b
+        colour_row(f, "bg", "Background")
+        colour_row(f, "text", "Text")
+        colour_row(f, "accent", "Accent")
 
         cmb_font = QComboBox()
         cmb_font.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
@@ -2167,10 +2186,11 @@ class SettingsDialog(QDialog):
             cb.currentIndexChanged.connect(lambda _i: (ov.set_setting(key(k), cb.currentData()), board.update()))
             f.addRow(label, cb)
             return cb
-        cmb_head = choice("header", "Top strip", (("", "Same as the default for all boards"), ("band", "Dark strip and accent bar"),
-                                                   ("line", "Accent bar only"), ("plain", "Title only")))
-        cmb_foot = choice("footer", "Bottom strip", (("", "Same as the default for all boards"), ("band", "Dark strip"),
-                                                      ("plain", "Text only")))
+        cmb_head = choice("header", "Top", (("", "Default"), ("band", "Strip and bar"), ("line", "Bar"), ("plain", "Title only")))
+        cmb_foot = choice("footer", "Bottom", (("", "Default"), ("band", "Strip"), ("plain", "Text only")))
+        more = Collapsible("More")
+        colour_row(more.form(), "sub", "Small text")
+        f.addRow(more)
 
         def sync():
             for k in btns:
@@ -2182,7 +2202,7 @@ class SettingsDialog(QDialog):
         sync()
         self._board_syncs.append(sync)
 
-        b_reset = QPushButton("Same as the Tower again (reset this board's look)")
+        b_reset = QPushButton("Back to the Tower's look")
 
         def reset_look():
             for k in ("bg", "text", "sub", "accent", "font", "header", "footer"):
@@ -2191,7 +2211,7 @@ class SettingsDialog(QDialog):
             sync()
             board.update()
         b_reset.clicked.connect(reset_look)
-        f.addRow("", b_reset)
+        f.addRow(b_reset)
         return g
 
     def sync_board_sizes(self):

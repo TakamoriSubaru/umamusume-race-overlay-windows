@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.9.1
+
+- **Colour sets for every board.** In Look > Results / Skill luck / Match / Standings, click a set to colour that board in one go.
+- **Less text** in the board tabs and in Board timing.
+
 ## 2.9.0
 
 - **Every board now has its own tab in Look:** *Results*, *Skill luck*, *Match* and *Standings*, plus *Board timing*. Each board has its own **size**, background, text and accent colours, font, text size and top / bottom strip.
