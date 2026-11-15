@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.8.0
+
+- **The Points tab is now "Scoring System", with its own small tabs:** *Points* (where points come from, and what is shown on stream), *Sheet layout* (columns and rounds of your Google Sheet), *Sheet filler* (send the placings into your sheet by itself) and *Board look* (title, borders, avatars, pages).
+- Nothing was removed. Your settings stay as they were.
+
 ## 2.7.1
 
 - **Analysis board removed.** The app is back to how it was in 2.5.2 (the 2.6.0 and 2.7.0 analysis board and replay are gone).

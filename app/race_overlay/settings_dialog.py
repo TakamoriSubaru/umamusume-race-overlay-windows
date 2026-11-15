@@ -765,7 +765,7 @@ class SettingsDialog(QDialog):
         sp_ls.setValue(float(s.get("luck_seconds", 10.0)))
         sp_ls.valueChanged.connect(lambda v: ov.set_setting("luck_seconds", float(v)))
         fl.addRow("Stays", sp_ls)
-        bnote = QLabel("<i>The standings board has its own settings in the Points tab. Each board is its own window "
+        bnote = QLabel("<i>The standings board has its own settings in the Scoring System tab. Each board is its own window "
                        "in OBS. Drag a board to move it, pull its edges to resize it.</i>")
         bnote.setWordWrap(True)
         bv.insertWidget(0, bnote)
@@ -975,7 +975,7 @@ class SettingsDialog(QDialog):
         self._tabs = tabs
         self._status_tab = stt
         if limited:                                  # Tower: Home, Look, People, Help. Advanced: also Data
-            hidden = ("Data", "Points", "Draft") if simple else ("Points", "Draft")
+            hidden = ("Data", "Scoring System", "Draft") if simple else ("Scoring System", "Draft")
             for i in range(tabs.count()):
                 if tabs.tabText(i).replace(" (WIP)", "") in hidden:
                     tabs.setTabVisible(i, False)
@@ -1127,7 +1127,7 @@ class SettingsDialog(QDialog):
         self.lbl_sheet = QLabel("")
         self.lbl_sheet.setWordWrap(True)
         bl2.addWidget(self.lbl_sheet)
-        cols = Collapsible("Columns (only if the automatic way fails)")
+        cols = Collapsible("Columns (only if the automatic way fails)", open_=True)
         f = cols.form()
         self.ed_tab = QLineEdit(s.get("standings_tab", ""))
         self.ed_tab.setPlaceholderText("first tab")
@@ -1148,7 +1148,7 @@ class SettingsDialog(QDialog):
         self.sp_first.setValue(int(s.get("standings_first_row", 4)))
         self.sp_first.valueChanged.connect(lambda _v: self.apply_sheet())
         f.addRow("First row with a player", self.sp_first)
-        rbox = Collapsible("Rounds (when your sheet has several)")
+        rbox = Collapsible("Rounds (when your sheet has several)", open_=True)
         rl = rbox.body_l
         rf = QFormLayout()
         self.cmb_view = QComboBox()
@@ -1170,16 +1170,20 @@ class SettingsDialog(QDialog):
         self.ed_total.editingFinished.connect(self.apply_rounds)
         rf.addRow("Final Rankings (player, 1, 2, 3)", self.ed_total)
         rl.addLayout(rf)
-        lay_fold = Collapsible("Sheet layout (only if the board looks wrong)")
-        lay_hint = QLabel("The program finds the columns and rounds by itself. Change these only when the board is wrong.")
+        lay_page = QWidget()                      # inner tab "Sheet layout"
+        lay_v = QVBoxLayout(lay_page)
+        lay_v.setSpacing(10)
+        lay_hint = QLabel("Only used when the board follows your Google Sheet. The program finds the columns and rounds by itself. Change these only when the board is wrong.")
         lay_hint.setWordWrap(True)
         lay_hint.setStyleSheet("color:%s;" % THEME["sub"])
-        lay_fold.body_l.addWidget(lay_hint)
-        lay_fold.body_l.addWidget(cols)
-        lay_fold.body_l.addWidget(rbox)
-        bl2.addWidget(lay_fold)
-        wbox = Collapsible("Fill my sheet with the placings (optional)")
-        wl = wbox.body_l
+        lay_v.addWidget(lay_hint)
+        lay_v.addWidget(cols)
+        lay_v.addWidget(rbox)
+        lay_v.addStretch(1)
+        fill_page = QWidget()                     # inner tab "Sheet filler"
+        wl = QVBoxLayout(fill_page)
+        wl.setSpacing(10)
+        wl.addWidget(QLabel("Optional: the program writes every finished race into your Google Sheet by itself."))
         wg = QGridLayout()
         wg.setSpacing(8)
         for i, (n, kind, title, sub) in enumerate((
@@ -1227,7 +1231,7 @@ class SettingsDialog(QDialog):
         self.ed_wsec.editingFinished.connect(lambda: ov.set_setting("sheet_write_secret", self.ed_wsec.text().strip()))
         wsec.body_l.addWidget(self.ed_wsec)
         wl.addWidget(wsec)
-        bl2.addWidget(wbox)
+        wl.addStretch(1)
         v.addWidget(sheetw)
 
         # --- what is shown on stream
@@ -1259,7 +1263,7 @@ class SettingsDialog(QDialog):
         ol.addWidget(bnow)
         v.addWidget(obox)
 
-        lbox = Collapsible("Look of the board: title, borders, avatars, pages")
+        lbox = Collapsible("Look of the board: title, borders, avatars, pages", open_=True)
         lf = lbox.form()
         ed_title = QLineEdit(s.get("standings_title", "STANDINGS"))
         ed_title.setPlaceholderText("STANDINGS")
@@ -1306,7 +1310,10 @@ class SettingsDialog(QDialog):
         sp_page.setValue(float(s.get("standings_page_seconds", 6.0)))
         sp_page.valueChanged.connect(lambda x: ov.set_setting("standings_page_seconds", float(x)))
         lf.addRow("Next page after", sp_page)
-        v.addWidget(lbox)
+        look_page = QWidget()                     # inner tab "Board look"
+        look_v = QVBoxLayout(look_page)
+        look_v.addWidget(lbox)
+        look_v.addStretch(1)
         v.addStretch(1)
 
         def sync_smode(*_a):
@@ -1317,10 +1324,15 @@ class SettingsDialog(QDialog):
             self.card_local.setChecked(not sheet)
         self.cmb_smode.currentIndexChanged.connect(sync_smode)
         sync_smode()
-        sc = self.scrolled(st)
-        self._stand_tab = sc
+        inner = QTabWidget()                      # Scoring System: Points, Sheet layout, Sheet filler, Board look
+        inner.addTab(self.scrolled(st), "Points")
+        inner.addTab(self.scrolled(lay_page), "Sheet layout")
+        inner.addTab(self.scrolled(fill_page), "Sheet filler")
+        inner.addTab(self.scrolled(look_page), "Board look")
+        self._stand_tab = inner
+        self._score_tabs = inner
         self.update_book_label()
-        tabs.addTab(sc, "Points")
+        tabs.addTab(inner, "Scoring System")
         self._data_layout.insertWidget(0, self.build_skills_box())      # in the Data tab, at the top
         self.update_race_data_label()
 
@@ -2107,6 +2119,7 @@ class SettingsDialog(QDialog):
         self.sync_widgets()
 
     def show_tab(self, name):
+        name = "Scoring System" if name == "Points" else name
         for i in range(self._tabs.count()):
             if self._tabs.tabText(i).replace(" (WIP)", "") == name:
                 self._tabs.setCurrentIndex(i)
