@@ -22,6 +22,7 @@ class MatchBoard(ResultsBoard):
     TITLE_KEY = "match_title"
     STAY_KEY = "match_seconds"
     POS_KEY, SCALE_KEY = "match_pos", "match_scale"
+    PREFIX = "match"
 
     def __init__(self, ov):
         super().__init__(ov)
@@ -97,7 +98,7 @@ class MatchBoard(ResultsBoard):
             y += SUB_H
             rows = self.rows_shown()
             if not rows:
-                p.setFont(self.ov.fnt(11))
+                p.setFont(self.fnt(11))
                 p.setPen(sc)
                 p.drawText(QRectF(PAD, y, 2 * COL_W + GUTTER, RACE_H), Qt.AlignmentFlag.AlignCenter,
                            "No race scored yet")
@@ -111,7 +112,7 @@ class MatchBoard(ResultsBoard):
             p.drawText(QRectF(PAD + 8, y, 2 * COL_W + GUTTER - 16, SUB_H),
                        Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, "DRAFTED UMAS")
             y += SUB_H
-            f = self.ov.fnt(12)
+            f = self.fnt(12)
             p.setFont(f)
             for c in range(2):
                 x = PAD + c * (COL_W + GUTTER)
@@ -144,7 +145,7 @@ class MatchBoard(ResultsBoard):
         name = team["name"].upper()
         p.drawText(QRectF(x + 8, y + 8, COL_W - 16, 22), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                    QFontMetrics(nf).elidedText(name, Qt.TextElideMode.ElideRight, int(COL_W - 16)))
-        p.setFont(self.ov.fnt(40, True, mono=True))
+        p.setFont(self.fnt(40, True, mono=True))
         p.setPen(col if not winner else QColor(ac))
         p.drawText(QRectF(x, y + 28, COL_W, 46), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                    str(score))
@@ -162,13 +163,13 @@ class MatchBoard(ResultsBoard):
         bg = QColor(tc)
         bg.setAlpha(18)
         p.fillPath(row, bg)
-        p.setFont(self.ov.fnt(11, True))
+        p.setFont(self.fnt(11, True))
         p.setPen(sc)
         p.drawText(QRectF(PAD, y, 2 * COL_W + GUTTER, rh), Qt.AlignmentFlag.AlignCenter, label)
         for c, d in enumerate((da, db)):
             x = PAD + c * (COL_W + GUTTER)
             col = QColor(m.teams[c]["color"])
-            p.setFont(self.ov.fnt(15, True, mono=True))
+            p.setFont(self.fnt(15, True, mono=True))
             p.setPen(col if d else sc)
             text = ("+%d" % d) if d > 0 else (str(d) if d < 0 else "0")
             p.drawText(QRectF(x + 14, y, COL_W - 28, rh),

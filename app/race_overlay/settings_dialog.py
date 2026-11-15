@@ -403,14 +403,18 @@ class SettingsDialog(QDialog):
         ft = QFormLayout()
         tv.addLayout(ft)
         tv.addStretch(1)
-        boards = QWidget()                # Boards: results board and skill luck board
+        boards = QWidget()                # Board timing (each board also has its own tab)
         bv = QVBoxLayout(boards)
+        res_page = QWidget()              # Results board
+        rpv = QVBoxLayout(res_page)
         gres = QGroupBox("Results board")
         fr = QFormLayout(gres)
-        bv.addWidget(gres)
+        rpv.addWidget(gres)
+        luck_page = QWidget()             # Skill luck board
+        lpv = QVBoxLayout(luck_page)
         gluck = QGroupBox("Skill luck board")
         fl = QFormLayout(gluck)
-        bv.addWidget(gluck)
+        lpv.addWidget(gluck)
         bv.addStretch(1)
         s = ov.s
 
@@ -748,10 +752,12 @@ class SettingsDialog(QDialog):
         cb_win.setChecked(bool(s.get("results_winner", True)))
         cb_win.toggled.connect(lambda on: (ov.set_setting("results_winner", on), refit_results()))
         fr.addRow("Winner", cb_win)
-        self.cmb_bhead = board_combo(fr, "Top strip (all boards)", "board_header",
+        gdef = QGroupBox("Default for all boards")
+        gdf = QFormLayout(gdef)
+        self.cmb_bhead = board_combo(gdf, "Top strip", "board_header",
                                      (("band", "Dark strip and accent bar"), ("line", "Accent bar only"),
                                       ("plain", "Title only")), refit_results)
-        self.cmb_bfoot = board_combo(fr, "Bottom strip (all boards)", "board_footer",
+        self.cmb_bfoot = board_combo(gdf, "Bottom strip", "board_footer",
                                      (("band", "Dark strip"), ("plain", "Text only")), refit_results)
         ed_lt = QLineEdit(s.get("luck_title", ""))
         ed_lt.setPlaceholderText("SKILL LUCK")
@@ -765,8 +771,8 @@ class SettingsDialog(QDialog):
         sp_ls.setValue(float(s.get("luck_seconds", 10.0)))
         sp_ls.valueChanged.connect(lambda v: ov.set_setting("luck_seconds", float(v)))
         fl.addRow("Stays", sp_ls)
-        bnote = QLabel("<i>The standings board has its own settings in the Scoring System tab. Each board is its own window "
-                       "in OBS. Drag a board to move it, pull its edges to resize it.</i>")
+        bnote = QLabel("<i>Each board has its own tab here with its own size and look. The standings board also has settings in the Scoring "
+                       "System tab. Each board is its own window in OBS. Drag a board to move it, pull its edges to resize it.</i>")
         bnote.setWordWrap(True)
         bv.insertWidget(0, bnote)
 
@@ -823,10 +829,34 @@ class SettingsDialog(QDialog):
             prow.addWidget(b)
         tl.addLayout(prow)
         bv.insertWidget(1, gtime)
+        bv.insertWidget(2, gdef)
+        self._size_spins, self._board_syncs = [], []
+        rpv.addWidget(self.board_look_group(ov.board, "results board"))
+        rpv.addStretch(1)
+        lpv.addWidget(self.board_look_group(ov.luck, "skill luck board"))
+        lpv.addStretch(1)
+        match_page = QWidget()            # Match board
+        mpv = QVBoxLayout(match_page)
+        mn = QLabel("<i>The teams, picks and score of the match board are in the Draft tab.</i>")
+        mn.setWordWrap(True)
+        mpv.addWidget(mn)
+        mpv.addWidget(self.board_look_group(ov.mboard, "match board"))
+        mpv.addStretch(1)
+        stand_page = QWidget()            # Standings board
+        spv = QVBoxLayout(stand_page)
+        sn = QLabel("<i>The rows, title, avatars and pages of the standings board are in the Scoring System tab (Board look).</i>")
+        sn.setWordWrap(True)
+        spv.addWidget(sn)
+        spv.addWidget(self.board_look_group(ov.standings, "standings board"))
+        spv.addStretch(1)
         look_tabs = QTabWidget()          # Look: colours, Tower and Boards as inner tabs (like People)
         look_tabs.addTab(self.scrolled(look), "Colours and pictures")
         look_tabs.addTab(self.scrolled(tower), "Tower")
-        look_tabs.addTab(self.scrolled(boards), "Boards")
+        look_tabs.addTab(self.scrolled(res_page), "Results")
+        look_tabs.addTab(self.scrolled(luck_page), "Skill luck")
+        look_tabs.addTab(self.scrolled(match_page), "Match")
+        look_tabs.addTab(self.scrolled(stand_page), "Standings")
+        look_tabs.addTab(self.scrolled(boards), "Board timing")
         tabs.addTab(look_tabs, "Look")
         if simple:
             look_tabs.setTabVisible(2, False)          # no boards in the simple version
@@ -2039,6 +2069,140 @@ class SettingsDialog(QDialog):
         f.setBold(True)
         self.lbl_fontprev.setFont(f)
 
+    def board_look_group(self, board, name):
+        """Size and look of one board. Empty = the same as the Tower (or the default for all boards)."""
+        ov = self.ov
+        p = board.PREFIX
+        key = lambda k: "%s_look_%s" % (p, k)
+        g = QGroupBox("Size and look of the " + name)
+        f = QFormLayout(g)
+        SAME = "Same as the Tower"
+
+        sp = QSpinBox()
+        sp.setRange(30, 300)
+        sp.setSingleStep(5)
+        sp.setSuffix(" %")
+        sp.setValue(int(round(board.pref_scale * 100)))
+        sp.setToolTip("The size of this board. You can also pull its edges.")
+        sp.valueChanged.connect(lambda v: board.set_size_pct(v))
+        f.addRow("Size", sp)
+        self._size_spins.append((board, sp))
+
+        glob = {"bg": "bg", "text": "text_color", "sub": "sub_color", "accent": "accent"}
+        btns = {}
+
+        def paint(k):
+            v = ov.s.get(key(k), "")
+            shown = v or ov.s.get(glob[k]) or "#f5c518"
+            self.swatch(btns[k], shown)
+            if not v:
+                btns[k].setText(SAME)
+
+        def choose(k):
+            cur = ov.s.get(key(k), "") or ov.s.get(glob[k]) or "#f5c518"
+            c = QColorDialog.getColor(QColor(cur), self, "Choose colour")
+            if c.isValid():
+                ov.set_setting(key(k), c.name())
+                paint(k)
+                board.update()
+
+        def same(k):
+            ov.set_setting(key(k), "")
+            paint(k)
+            board.update()
+        for k, label in (("bg", "Background"), ("text", "Text colour"), ("sub", "Second text colour"), ("accent", "Accent colour")):
+            row = QHBoxLayout()
+            b = QPushButton()
+            b.setMinimumWidth(10)
+            b.clicked.connect(lambda _c=False, k=k: choose(k))
+            r = QPushButton("Same")
+            r.setToolTip("Use the colour of the Tower again")
+            r.setMinimumWidth(10)
+            r.clicked.connect(lambda _c=False, k=k: same(k))
+            row.addWidget(b, 1)
+            row.addWidget(r)
+            f.addRow(label, row)
+            btns[k] = b
+
+        cmb_font = QComboBox()
+        cmb_font.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        cmb_font.setMinimumContentsLength(10)
+
+        def fill_font(current):
+            have = {x.lower(): x for x in QFontDatabase.families()}
+            names = [have[n.lower()] for n in self.COMMON_FONTS if n.lower() in have]
+            if current and current.lower() not in [n.lower() for n in names]:
+                names.insert(0, current)
+            cmb_font.blockSignals(True)
+            cmb_font.clear()
+            cmb_font.addItem(SAME, "")
+            for n in names:
+                cmb_font.addItem(n, n)
+                cmb_font.setItemData(cmb_font.count() - 1, QFont(n, 12), Qt.ItemDataRole.FontRole)
+            cmb_font.addItem("More fonts...", "__more__")
+            cmb_font.setCurrentIndex(max(0, cmb_font.findData(current or "")))
+            cmb_font.blockSignals(False)
+
+        def on_font(_i):
+            data = cmb_font.currentData()
+            if data == "__more__":
+                cur = ov.s.get(key("font"), "")
+                data = self.pick_font(cur) or cur
+                fill_font(data)
+            ov.set_setting(key("font"), data or "")
+            board.update()
+        cmb_font.currentIndexChanged.connect(on_font)
+        f.addRow("Font", cmb_font)
+
+        cmb_size = QComboBox()
+        for v in (0.0, 0.7, 0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0):
+            cmb_size.addItem(SAME if not v else "%d%%" % round(v * 100), v)
+        cmb_size.currentIndexChanged.connect(lambda _i: (ov.set_setting(key("text_scale"), float(cmb_size.currentData())), board.update()))
+        f.addRow("Text size", cmb_size)
+
+        def choice(k, label, items):
+            cb = QComboBox()
+            for data, text in items:
+                cb.addItem(text, data)
+            cb.currentIndexChanged.connect(lambda _i: (ov.set_setting(key(k), cb.currentData()), board.update()))
+            f.addRow(label, cb)
+            return cb
+        cmb_head = choice("header", "Top strip", (("", "Same as the default for all boards"), ("band", "Dark strip and accent bar"),
+                                                   ("line", "Accent bar only"), ("plain", "Title only")))
+        cmb_foot = choice("footer", "Bottom strip", (("", "Same as the default for all boards"), ("band", "Dark strip"),
+                                                      ("plain", "Text only")))
+
+        def sync():
+            for k in btns:
+                paint(k)
+            fill_font(ov.s.get(key("font"), ""))
+            cmb_size.setCurrentIndex(max(0, cmb_size.findData(float(ov.s.get(key("text_scale"), 0.0) or 0.0))))
+            cmb_head.setCurrentIndex(max(0, cmb_head.findData(ov.s.get(key("header"), ""))))
+            cmb_foot.setCurrentIndex(max(0, cmb_foot.findData(ov.s.get(key("footer"), ""))))
+        sync()
+        self._board_syncs.append(sync)
+
+        b_reset = QPushButton("Same as the Tower again (reset this board's look)")
+
+        def reset_look():
+            for k in ("bg", "text", "sub", "accent", "font", "header", "footer"):
+                ov.set_setting(key(k), "")
+            ov.set_setting(key("text_scale"), 0.0)
+            sync()
+            board.update()
+        b_reset.clicked.connect(reset_look)
+        f.addRow("", b_reset)
+        return g
+
+    def sync_board_sizes(self):
+        """The size boxes follow the boards when you pull a board's edges."""
+        for board, sp in getattr(self, "_size_spins", ()):
+            v = int(round(board.pref_scale * 100))
+            if sp.value() != v and not sp.hasFocus():
+                sp.blockSignals(True)
+                sp.setValue(max(sp.minimum(), min(sp.maximum(), v)))
+                sp.blockSignals(False)
+
     def pick_font(self, current):
         """Every font on this computer: type to search, each name is drawn in its own font, with a preview."""
         dlg = QDialog(self)
@@ -2099,6 +2263,8 @@ class SettingsDialog(QDialog):
 
     def reset(self):
         self.ov.reset_settings()
+        for fn in getattr(self, "_board_syncs", ()):
+            fn()
         s = self.ov.s
         self.cb_top.setChecked(s["on_top"])
         self.cb_hide.setChecked(bool(s.get("auto_hide", True)))
@@ -2127,6 +2293,7 @@ class SettingsDialog(QDialog):
 
     def poll(self):
         ov = self.ov
+        self.sync_board_sizes()
         dot = STATE_COLORS.get("green" if ov.racing else ov.state, "#f1c40f")
         if ov.racing:
             dot = "#3498db"

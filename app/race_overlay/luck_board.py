@@ -17,6 +17,7 @@ class LuckBoard(ResultsBoard):
     TITLE_KEY = "luck_title"
     STAY_KEY = "luck_seconds"
     POS_KEY, SCALE_KEY = "luck_pos", "luck_scale"
+    PREFIX = "luck"
 
     def set_data(self, entries, footer):
         self.entries = list(entries)
@@ -61,7 +62,7 @@ class LuckBoard(ResultsBoard):
 
         name_x, right_w = x + 52, 78
         name_w = COL_W - 52 - right_w - 6
-        tf = ov.fnt(13, True)
+        tf = self.fnt(13, True)
         p.setFont(tf)
         p.setPen(tc)
         head, sub = ov.name_parts(h)
@@ -69,19 +70,19 @@ class LuckBoard(ResultsBoard):
                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                    QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, int(name_w)))
         if sub:
-            nf = ov.fnt(10)
+            nf = self.fnt(10)
             p.setFont(nf)
             p.setPen(sc)
             p.drawText(QRectF(name_x, y + 23, name_w, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                        QFontMetrics(nf).elidedText(sub, Qt.TextElideMode.ElideRight, int(name_w)))
 
         total = ent["total"]
-        p.setFont(ov.fnt(17, True, mono=True))
+        p.setFont(self.fnt(17, True, mono=True))
         p.setPen(col)
         p.drawText(QRectF(x + COL_W - right_w - 6, y + 2, right_w, 20),
                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                    ("%d/%d" % (ent["hit"], total)) if total else str(ent["hit"]))
-        p.setFont(ov.fnt(10, False))
+        p.setFont(self.fnt(10, False))
         p.setPen(sc)
         if total:
             small = "all hit!" if ent["hit"] == total else "%d missed" % (total - ent["hit"])

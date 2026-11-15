@@ -25,6 +25,7 @@ class StandingsBoard(ResultsBoard):
     NAME = STANDINGS_NAME
     TITLE = "STANDINGS"
     POS_KEY, SCALE_KEY = "standings_pos", "standings_scale"
+    PREFIX = "standings"
 
     def __init__(self, ov):
         super().__init__(ov)
@@ -229,7 +230,7 @@ class StandingsBoard(ResultsBoard):
             p.setPen(pen)
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRoundedRect(QRectF(x + 0.65, y + 0.65, COL_W - 1.3, rh - 1.3), 5.5, 5.5)
-        p.setFont(ov.fnt(16, True))
+        p.setFont(self.fnt(16, True))
         p.setPen(tc)
         p.drawText(QRectF(x + 8, y, 34, rh), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "%d." % rank)
         score_w = 84
@@ -242,7 +243,7 @@ class StandingsBoard(ResultsBoard):
                                    (row["name"].strip()[:1] or "?").upper(), QColor("#ffffff"))
             tx = x + 76
         name_w = COL_W - (tx - x) - score_w - 6
-        tf = ov.fnt(13, True)
+        tf = self.fnt(13, True)
         p.setFont(tf)
         p.setPen(tc)
         uma = row.get("uma", "")
@@ -250,12 +251,12 @@ class StandingsBoard(ResultsBoard):
         p.drawText(top, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                    QFontMetrics(tf).elidedText(ov.display_trainer(row["name"]), Qt.TextElideMode.ElideRight, int(name_w)))
         if uma:
-            nf = ov.fnt(9.5)
+            nf = self.fnt(9.5)
             p.setFont(nf)
             p.setPen(sc)
             p.drawText(QRectF(tx, y + 21, name_w, 13), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                        QFontMetrics(nf).elidedText(uma, Qt.TextElideMode.ElideRight, int(name_w)))
-        p.setFont(ov.fnt(18, True, mono=True))
+        p.setFont(self.fnt(18, True, mono=True))
         p.setPen(tc)
         score = row["score"]
         text = ("%g" % score) if isinstance(score, float) else str(score)
@@ -263,7 +264,7 @@ class StandingsBoard(ResultsBoard):
         p.drawText(QRectF(x + COL_W - score_w - 8, y + (2 if has_last else 0), score_w, 20 if has_last else rh),
                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, text)
         if has_last:
-            p.setFont(ov.fnt(10, True))
+            p.setFont(self.fnt(10, True))
             p.setPen(ac)
             p.drawText(QRectF(x + COL_W - score_w - 8, y + 21, score_w, 13),
                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, "+%d" % row["last"])

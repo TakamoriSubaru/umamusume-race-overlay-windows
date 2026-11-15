@@ -216,6 +216,11 @@ DEFAULT_SETTINGS = {
     "standings_refresh": 60,   # sheet: seconds between reloads
 }
 
+for _b in ("results", "luck", "match", "standings"):      # each board's own look ("" = same as the Tower)
+    for _k in ("bg", "text", "sub", "accent", "font", "header", "footer"):
+        DEFAULT_SETTINGS["%s_look_%s" % (_b, _k)] = ""
+    DEFAULT_SETTINGS["%s_look_text_scale" % _b] = 0.0
+
 
 KEEP_ON_RESET = ("simple_mode", "level", "saved_races_dir", "auto_hide",
                  "update_url", "auto_update_check", "update_skip", "seen_version",

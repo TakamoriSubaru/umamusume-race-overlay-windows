@@ -622,17 +622,19 @@ class OverlayWidget(FramelessMixin, QWidget):
         c = QColor(self.s.get(role + "_color") or "")
         return c if c.isValid() else QColor(self.s["text_color"])
 
-    def fnt(self, px, bold=False, mono=False):
+    def fnt(self, px, bold=False, mono=False, board=None):
         """A font that follows the Settings window (family + size %), or the header / racer font of the part being drawn."""
         role = {"header": "header", "row": "racer"}.get(self._role, "")
-        fam = (self.s.get(role + "_font") if role and not mono else "") or self.s.get("font") or ("Monospace" if mono else "")
+        own = self.s.get(board + "_look_font", "") if board else ""        # the board's own font
+        fam = own or (self.s.get(role + "_font") if role and not mono else "") or self.s.get("font") or ("Monospace" if mono else "")
         f = QFont(fam) if fam else QFont()
         if self._role == "row":
             try:
                 px = px * min(1.6, max(0.6, float(self.s.get("racer_scale", 1.0))))
             except (TypeError, ValueError):
                 pass
-        f.setPixelSize(max(6, int(round(px * float(self.s.get("text_scale", 1.0))))))
+        ts = float(self.s.get(board + "_look_text_scale", 0.0) or 0.0) if board else 0.0
+        f.setPixelSize(max(6, int(round(px * (ts or float(self.s.get("text_scale", 1.0)))))))
         f.setBold(bold)
         return f
 

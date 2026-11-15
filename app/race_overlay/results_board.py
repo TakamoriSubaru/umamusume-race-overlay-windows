@@ -32,6 +32,25 @@ class ResultsBoard(FramelessMixin, QWidget):
     TITLE_KEY = "results_title"      # setting with your own title
     STAY_KEY = "results_seconds"     # setting: how long the board stays
     POS_KEY, SCALE_KEY = "results_pos", "results_scale"
+    PREFIX = "results"               # the board's own look settings are <PREFIX>_look_*
+    LOOK_GLOBAL = {"bg": "bg", "text": "text_color", "sub": "sub_color", "accent": "accent",
+                   "header": "board_header", "footer": "board_footer"}
+
+    def lk(self, name):
+        """A look setting of this board; empty = the same as the Tower (or the default for all boards)."""
+        v = self.ov.s.get("%s_look_%s" % (self.PREFIX, name), "")
+        return v or self.ov.s.get(self.LOOK_GLOBAL[name], "")
+
+    def fnt(self, px, bold=False, mono=False):
+        return self.ov.fnt(px, bold, mono, board=self.PREFIX)
+
+    def set_size_pct(self, pct):
+        """Size of this board in % of its design size (the same as pulling its edges)."""
+        self.pref_scale = max(0.3, float(pct) / 100.0)
+        self.ov.cfg[self.SCALE_KEY] = round(self.pref_scale, 4)
+        self.ov.save_settings()
+        fit_window(self, self.lw, self.lh, self.pref_scale)
+        self.update()
 
     def __init__(self, ov):
         super().__init__()
@@ -187,12 +206,12 @@ class ResultsBoard(FramelessMixin, QWidget):
         p = QPainter(self)
         p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing
                          | QPainter.RenderHint.SmoothPixmapTransform)
-        panel = QColor(s["bg"])
+        panel = QColor(self.lk("bg"))
         panel.setAlphaF(float(s["bg_opacity"]))
         if a.chroma:
             p.fillRect(self.rect(), QColor(a.chroma_color))
         elif not a.transparent:
-            p.fillRect(self.rect(), QColor(s["bg"]))
+            p.fillRect(self.rect(), QColor(self.lk("bg")))
         if not self.entries or self.slide <= 0.01:
             p.end()
             return
@@ -210,23 +229,23 @@ class ResultsBoard(FramelessMixin, QWidget):
             path.addRoundedRect(QRectF(0, 0, lw, lh), 10, 10)
             p.fillPath(path, panel)
 
-        tc, sc, ac = QColor(s["text_color"]), QColor(s["sub_color"]), QColor(s.get("accent") or "#f5c518")
+        tc, sc, ac = QColor(self.lk("text")), QColor(self.lk("sub")), QColor(self.lk("accent") or "#f5c518")
         self.draw_title(p, lw, tc, ac)
         self.draw_columns(p, tc, sc, ac)
         self.draw_footer(p, lw, lh, ac)
         p.end()
 
     def spaced(self, px, bold, spacing):
-        f = self.ov.fnt(px, bold)
+        f = self.fnt(px, bold)
         f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, spacing)
         return f
 
     def band(self):
         """The darker strip behind the title and the track name; lighter on a light background."""
-        return QColor(0, 0, 0, 70 if QColor(self.ov.s["bg"]).lightness() < 128 else 22)
+        return QColor(0, 0, 0, 70 if QColor(self.lk("bg")).lightness() < 128 else 22)
 
     def draw_title(self, p, lw, tc, ac):
-        style = self.ov.s.get("board_header", "band")
+        style = self.lk("header") or "band"
         if style == "band":
             p.fillRect(QRectF(0, 0, lw, TOP_H), self.band())
         if style in ("band", "line"):
@@ -289,7 +308,7 @@ class ResultsBoard(FramelessMixin, QWidget):
             p.fillPath(strip, podium)
 
         # placing number
-        p.setFont(ov.fnt(17, True))
+        p.setFont(self.fnt(17, True))
         p.setPen(podium if podium is not None else tc)
         p.drawText(QRectF(x + 8, y, 30, rh), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "%d." % place)
 
@@ -303,17 +322,17 @@ class ResultsBoard(FramelessMixin, QWidget):
         pw = PTS_W if "pts" in ent else 0
         name_w = self.col_w - 82 - time_w - 4 - pw
         head, label = ov.name_parts(h)
-        tf = ov.fnt(13, True)
+        tf = self.fnt(13, True)
         p.setFont(tf)
         p.setPen(tc)
         if label:
             p.drawText(QRectF(name_x, y + 5, name_w, 18), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                        QFontMetrics(tf).elidedText(head, Qt.TextElideMode.ElideRight, int(name_w)))
-            nf = ov.fnt(10)
+            nf = self.fnt(10)
             for px in (9.0, 8.0):
                 if QFontMetrics(nf).horizontalAdvance(label) <= name_w:
                     break
-                nf = ov.fnt(px)
+                nf = self.fnt(px)
             p.setFont(nf)
             p.setPen(sc)
             p.drawText(QRectF(name_x, y + 23, name_w, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -325,24 +344,24 @@ class ResultsBoard(FramelessMixin, QWidget):
         # time + gap to the winner
         tx = x + self.col_w - time_w - 8 - pw
         if pw:
-            p.setFont(ov.fnt(17, True, mono=True))
+            p.setFont(self.fnt(17, True, mono=True))
             p.setPen(team_col if team_col is not None else (ac if place == 1 else tc))
             p.drawText(QRectF(x + self.col_w - pw - 6, y, pw, rh),
                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, str(ent["pts"]))
         details = ov.s.get("results_details", "both")
         if details != "none":
-            p.setFont(ov.fnt(14, True, mono=True))
+            p.setFont(self.fnt(14, True, mono=True))
             p.setPen(tc)
             p.drawText(QRectF(tx, y + 5, time_w, 18), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                        ent["time"])
         if details == "both":
-            p.setFont(ov.fnt(10, place == 1))
+            p.setFont(self.fnt(10, place == 1))
             p.setPen(ac if place == 1 else sc)
             p.drawText(QRectF(tx, y + 23, time_w, 14), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                        ent["gap"])
 
     def draw_footer(self, p, lw, lh, ac):
-        if self.ov.s.get("board_footer", "band") == "band":
+        if (self.lk("footer") or "band") == "band":
             p.fillRect(QRectF(0, lh - FOOT_H, lw, FOOT_H), self.band())
         f = self.spaced(15, True, 1.2)
         text = QFontMetrics(f).elidedText((self.footer or "RACE").upper(), Qt.TextElideMode.ElideRight, int(lw - 24))

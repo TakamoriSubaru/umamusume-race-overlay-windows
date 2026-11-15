@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.9.0
+
+- **Every board now has its own tab in Look:** *Results*, *Skill luck*, *Match* and *Standings*, plus *Board timing*. Each board has its own **size**, background, text and accent colours, font, text size and top / bottom strip.
+- By default each board is "Same as the Tower", so nothing changes until you pick something. A "Same" button next to each colour (and one reset button per board) goes back to the Tower's look.
+- The size box follows the board when you pull its edges, and the other way round.
+
 ## 2.8.0
 
 - **The Points tab is now "Scoring System", with its own small tabs:** *Points* (where points come from, and what is shown on stream), *Sheet layout* (columns and rounds of your Google Sheet), *Sheet filler* (send the placings into your sheet by itself) and *Board look* (title, borders, avatars, pages).
