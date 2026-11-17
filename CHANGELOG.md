@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.9.2
+
+- **The Look tab is simpler.** Three tabs now: *Colours*, *Tower* and *Boards*.
+- Each tab shows the main things first. The rarely used ones are in one **More** fold.
+- All boards share one *Boards* tab: pick the board in the list at the top.
+- Fewer buttons in each board's look: colour sets, size and three colours; font, text size and strips are in More.
+
 ## 2.9.1
 
 - **Colour sets for every board.** In Look > Results / Skill luck / Match / Standings, click a set to colour that board in one go.

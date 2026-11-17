@@ -29,6 +29,8 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QStackedWidget,
+    QSizePolicy,
     QScrollArea,
     QSlider,
     QSpinBox,
@@ -846,14 +848,70 @@ class SettingsDialog(QDialog):
         spv.addWidget(sn)
         spv.addWidget(self.board_look_group(ov.standings, "standings board"))
         spv.addStretch(1)
-        look_tabs = QTabWidget()          # Look: colours, Tower and Boards as inner tabs (like People)
-        look_tabs.addTab(self.scrolled(look), "Colours and pictures")
+        def move_rows(src, dst, labels=(), widgets=()):
+            """Move some rows of a form to another form (keeps the widgets and what they do)."""
+            L, Fr = QFormLayout.ItemRole.LabelRole, QFormLayout.ItemRole.FieldRole
+            pick = []
+            for i in range(src.rowCount()):
+                li, fi = src.itemAt(i, L), src.itemAt(i, Fr)
+                lw = li.widget() if li is not None else None
+                lt = lw.text() if lw is not None and hasattr(lw, "text") else ""
+                fw = fi.widget() if fi is not None else None
+                if (lt and any(lt.startswith(n) for n in labels)) or (fw is not None and any(fw is w for w in widgets)):
+                    pick.append(i)
+            rows = [src.takeRow(i) for i in reversed(pick)][::-1]
+            for r in rows:
+                lw = r.labelItem.widget() if r.labelItem is not None else None
+                fw = r.fieldItem.widget() if r.fieldItem is not None else None
+                fo = fw if fw is not None else (r.fieldItem.layout() if r.fieldItem is not None else None)
+                if lw is not None:
+                    dst.addRow(lw, fo)
+                else:
+                    dst.addRow(fo)
+
+        g_sets.setTitle("Colour sets")
+        g_cols.setTitle("Colours")
+        more_c = Collapsible("More options")             # Colours: the rarely used things in one fold
+        mfc = more_c.form()
+        move_rows(fc, mfc, ("Background opacity", "Small text colour"), (btn_reset,))
+        move_rows(f, mfc, (), (self.cb_prev,))
+        for w in (fold_font, fold_pod, g_my):
+            lv.removeWidget(w)
+            more_c.body_l.addWidget(w)
+        lv.insertWidget(lv.indexOf(g_cols) + 1, more_c)
+        fold_window = Collapsible("More tower options")  # Tower: the basics first
+        move_rows(ft, fold_window.form(), ("Slides in from", "Title bar", "Position arrows", "Small tower shows", "Move window to"))
+        tv.removeWidget(grow)
+        grow.setStyleSheet("QGroupBox { border: none; margin-top: 0; padding-top: 0; } QGroupBox::title { height: 0; padding: 0; background: transparent; }")
+        fold_show = Collapsible("What the tower shows")
+        fold_show.body_l.addWidget(grow)
+        tv.insertWidget(1, fold_window)
+        tv.insertWidget(2, fold_show)
+        boards_page = QWidget()                          # Boards: one page, pick the board
+        bpl = QVBoxLayout(boards_page)
+        cmb_board = QComboBox()
+        stack = QStackedWidget()
+        for label, pg in (("Results board", res_page), ("Skill luck board", luck_page), ("Match board", match_page),
+                          ("Standings board", stand_page), ("When the boards come in", boards)):
+            cmb_board.addItem(label)
+            stack.addWidget(pg)
+
+        def pick_board(i):
+            stack.setCurrentIndex(i)
+            for k in range(stack.count()):
+                stack.widget(k).setSizePolicy(QSizePolicy.Policy.Preferred,
+                                              QSizePolicy.Policy.Preferred if k == i else QSizePolicy.Policy.Ignored)
+            stack.updateGeometry()
+        cmb_board.currentIndexChanged.connect(pick_board)
+        pick_board(0)
+        self.cmb_board = cmb_board
+        bpl.addWidget(cmb_board)
+        bpl.addWidget(stack)
+        bpl.addStretch(1)
+        look_tabs = QTabWidget()          # Look: Colours, Tower and Boards as inner tabs
+        look_tabs.addTab(self.scrolled(look), "Colours")
         look_tabs.addTab(self.scrolled(tower), "Tower")
-        look_tabs.addTab(self.scrolled(res_page), "Results")
-        look_tabs.addTab(self.scrolled(luck_page), "Skill luck")
-        look_tabs.addTab(self.scrolled(match_page), "Match")
-        look_tabs.addTab(self.scrolled(stand_page), "Standings")
-        look_tabs.addTab(self.scrolled(boards), "Board timing")
+        look_tabs.addTab(self.scrolled(boards_page), "Boards")
         tabs.addTab(look_tabs, "Look")
         if simple:
             look_tabs.setTabVisible(2, False)          # no boards in the simple version
@@ -2131,18 +2189,15 @@ class SettingsDialog(QDialog):
             b = QPushButton()
             b.setMinimumWidth(10)
             b.clicked.connect(lambda _c=False: choose(k))
-            r = QPushButton("Tower")
-            r.setToolTip("Use the Tower's colour again")
-            r.setMinimumWidth(10)
-            r.clicked.connect(lambda _c=False: same(k))
             row.addWidget(b, 1)
-            row.addWidget(r)
             form.addRow(label, row)
             btns[k] = b
         colour_row(f, "bg", "Background")
         colour_row(f, "text", "Text")
         colour_row(f, "accent", "Accent")
 
+        more = Collapsible("More: font, text size, strips")
+        mf = more.form()
         cmb_font = QComboBox()
         cmb_font.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         cmb_font.setMinimumContentsLength(10)
@@ -2171,25 +2226,24 @@ class SettingsDialog(QDialog):
             ov.set_setting(key("font"), data or "")
             board.update()
         cmb_font.currentIndexChanged.connect(on_font)
-        f.addRow("Font", cmb_font)
+        mf.addRow("Font", cmb_font)
 
         cmb_size = QComboBox()
         for v in (0.0, 0.7, 0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0):
             cmb_size.addItem(SAME if not v else "%d%%" % round(v * 100), v)
         cmb_size.currentIndexChanged.connect(lambda _i: (ov.set_setting(key("text_scale"), float(cmb_size.currentData())), board.update()))
-        f.addRow("Text size", cmb_size)
+        mf.addRow("Text size", cmb_size)
 
         def choice(k, label, items):
             cb = QComboBox()
             for data, text in items:
                 cb.addItem(text, data)
             cb.currentIndexChanged.connect(lambda _i: (ov.set_setting(key(k), cb.currentData()), board.update()))
-            f.addRow(label, cb)
+            mf.addRow(label, cb)
             return cb
         cmb_head = choice("header", "Top", (("", "Default"), ("band", "Strip and bar"), ("line", "Bar"), ("plain", "Title only")))
         cmb_foot = choice("footer", "Bottom", (("", "Default"), ("band", "Strip"), ("plain", "Text only")))
-        more = Collapsible("More")
-        colour_row(more.form(), "sub", "Small text")
+        colour_row(mf, "sub", "Small text")
         f.addRow(more)
 
         def sync():
